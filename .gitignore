@@ -1,0 +1,30 @@
+# 密钥和本地配置
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 运行时数据库
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+
+# 可重新生成的向量数据库
+data/chroma/
+
+# 编辑器和系统文件
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
