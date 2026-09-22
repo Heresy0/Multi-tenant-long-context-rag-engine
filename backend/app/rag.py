@@ -18,9 +18,24 @@ from langchain_classic.chains.combine_documents import (create_stuff_documents_c
 from langchain_core.retrievers import BaseRetriever
 from pathlib import Path
 from .prompts import RAGprompt
+from .document_splitter import split_docx
 
 
 COLLECTION_NAME = "enterprise_knowledge"
+CHUNKING_VERSION = "structured-v1"
+
+
+def split_file(file_path: str | Path) -> list[Document]:
+    path = Path(file_path).resolve()
+
+    if path.suffix.lower() == ".docx":
+        return split_docx(path)
+
+    documents = load_file(path)
+    splitter = create_text_splitter()
+    return splitter.split_documents(documents)
+
+
 
 def create_embeddings(settings: Settings) -> OpenAIEmbeddings:
     """创建用于入库和查询的嵌入模型。"""
@@ -28,7 +43,8 @@ def create_embeddings(settings: Settings) -> OpenAIEmbeddings:
         model=settings.embedding_model,
         openai_api_key=settings.chat_api_key,
         base_url=settings.chat_base_url,
-        check_embedding_ctx_length=False
+        check_embedding_ctx_length=False,
+        chunk_size=10,
     )
 
 def create_vector_store(settings: Settings, embeddings: OpenAIEmbeddings) -> Chroma:
@@ -117,11 +133,7 @@ def index_file(file_path: str | Path,) -> int:
         embeddings =embeddings,
         )
 
-    documents = load_file(path)
-
-    splitter = create_text_splitter()
-
-    chunks = splitter.split_documents(documents)
+    chunks = split_file(path)
 
     if not chunks: 
         raise ValueError(
@@ -141,14 +153,33 @@ def index_file(file_path: str | Path,) -> int:
     chunk_ids: list[str] = []
 
     for index, chunk in enumerate(chunks):
-        #文件内容和切分序号不变时，ID保持不变
+
+        chunk_content_hash = hashlib.sha256(
+            chunk.page_content.encode("utf-8")
+        ).hexdigest()
+
+        parent_key = (
+            chunk.metadata.get("parent_key",index)
+        )
+
+        parent_id = hashlib.sha256(
+            (
+                f"{source_id}:"
+                f"{file_hash}:"
+                f"{parent_key}"
+            ).encode("utf-8")
+        ).hexdigest()
+        
         chunk_id = hashlib.sha256(
             (
                 f"{source_id}:"
                 f"{file_hash}:"
+                f"{CHUNKING_VERSION}:"
                 f"{index}"
+                f"{chunk_content_hash}"
             ).encode("utf-8")
         ).hexdigest()
+
         chunk_ids.append(chunk_id)
 
         chunk.metadata.update({
@@ -156,6 +187,9 @@ def index_file(file_path: str | Path,) -> int:
             "source_id": source_id,
             "file_hash": file_hash,
             "chunk_index": index,
+            "chunk_content_hash": chunk_content_hash,
+            "chunking_version": CHUNKING_VERSION,
+            "parent_id": parent_id,
         })
     #查询当前文件已经存在的多有文档块
     existing = vector_store.get(
@@ -200,8 +234,8 @@ def create_retriever(settings: Settings | None = None,
     return vector_store.as_retriever(
         search_type="mmr",
         search_kwargs={
-            "k": 3,
-            "fetch_k": 15
+            "k": 8,
+            "fetch_k": 30
         }
     )
 
