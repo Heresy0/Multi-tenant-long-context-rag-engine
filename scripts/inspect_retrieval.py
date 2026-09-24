@@ -249,13 +249,12 @@ def main() -> int:
     # 延迟导入：查看 --help 时不初始化模型或向量库。
     from backend.app.rag import create_retriever
 
-    retriever = create_retriever()
-
-    # 仅配置本脚本创建的检索器，不修改聊天服务。
-    retriever.search_kwargs.update({
-        "k": args.k,
-        "fetch_k": args.fetch_k,
-    })
+    # 参数在检索器创建时固定，避免评估过程中修改
+    # 共享检索器的运行时状态。
+    retriever = create_retriever(
+        k=args.k,
+        fetch_k=args.fetch_k,
+    )
 
     results = [
         evaluate_case(retriever, case, args.k)

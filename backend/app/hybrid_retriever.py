@@ -83,24 +83,6 @@ class HybridRetriever(BaseRetriever):
             run_manager: CallbackManagerForRetrieverRun,
     ) -> list[Document]:
         k = int(self.search_kwargs.get("k",8))
-        fetch_k = int(
-            self.search_kwargs.get("fetch_k",30)
-        )
-
-        #向量检索先找回较多候选
-        vector_search_kwargs = getattr(
-            self.vector_retriever,
-            "search_kwargs",
-            None,
-        )
-
-        if vector_search_kwargs is not None:
-            vector_search_kwargs.update({
-                "k": fetch_k,
-                "fetch_k": max(fetch_k * 2, 60),
-            })
-
-        self.keyword_retriever.k = fetch_k
 
         vector_documents = self.vector_retriever.invoke(
             query

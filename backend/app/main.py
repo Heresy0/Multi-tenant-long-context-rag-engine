@@ -5,6 +5,7 @@ from contextlib import ExitStack, asynccontextmanager
 from fastapi import FastAPI
 from .api.chat import router as chat_router
 from .chat_history import ChatHistoryRepository
+from .retrieval_service import RetrievalService
 
 
 @asynccontextmanager
@@ -17,9 +18,18 @@ async def lifespan(app: FastAPI):
         checkpointer = stack.enter_context(SqliteSaver.from_conn_string(str(database_path)))
         checkpointer.setup()
 
+        settings = Settings()
+
+        retrieval_service = RetrievalService(
+            settings=settings
+        )
+
+        app.state.retrieval_service = retrieval_service
+
         app.state.enterprise_agent = EnterpriseAgent(
-            settings=Settings(),
+            settings=settings,
             checkpointer=checkpointer,
+            retrieval_service=retrieval_service,
         )
 
         history_repository = ChatHistoryRepository(

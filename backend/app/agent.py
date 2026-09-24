@@ -3,15 +3,19 @@ from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.messages import AIMessageChunk, HumanMessage
 from langchain_openai import ChatOpenAI
 from .prompts import SYSTEM_PROMPT,SUMMARY_PROMPT
-from .tools import search_knowledge_base
+from .tools import create_search_knowledge_base_tool
 from .config import Settings
-
+from .retrieval_service import RetrievalService
 
 
 class EnterpriseAgent:
     """企业内部智能助手。"""
-    def __init__(self, settings: Settings, checkpointer,):
-        #self.checkpointer = checkpointer
+    def __init__(
+            self,
+            settings: Settings,
+            checkpointer,
+            retrieval_service: RetrievalService,
+        ):
 
 
         llm = ChatOpenAI(
@@ -34,7 +38,9 @@ class EnterpriseAgent:
         )
 
         self.tools = [
-            search_knowledge_base,
+            create_search_knowledge_base_tool(
+                retrieval_service
+            )
         ]
 
         self.agent = create_agent(

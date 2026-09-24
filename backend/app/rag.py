@@ -119,13 +119,19 @@ def calculate_file_hash(
         
 
 
-def index_file(file_path: str | Path,) -> int:
+def index_file(
+        file_path: str | Path,
+        settings: Settings | None = None,
+) -> int:
     """加载，切分文件并写入 Chroma。
     返回本次实际写入的文档块数量。
     如果文件内容没有发生变化，则返回 0。
     """
     path = Path(file_path).resolve()
-    settings = Settings()
+
+    if settings is None:
+        settings = Settings()
+
     embeddings = create_embeddings(settings)
     vector_store = create_vector_store(
         settings = settings,
@@ -218,11 +224,23 @@ def index_file(file_path: str | Path,) -> int:
     return len(chunks)
 
 
-def create_retriever(settings: Settings | None = None,
+def create_retriever(
+        settings: Settings | None = None,
+        *,
+        k: int = 8,
+        fetch_k: int = 30,
 ) -> BaseRetriever:
     """创建企业知识库检索器。"""
+
+    if k < 1:
+        raise ValueError("k必须大于0")
+
+    if fetch_k < k:
+        raise ValueError("fetch_k不能小于k")
+
     if settings is None:
         settings = Settings()
+
     embeddings = create_embeddings(settings)
 
     vector_store = create_vector_store(
@@ -232,8 +250,8 @@ def create_retriever(settings: Settings | None = None,
 
     return create_hybrid_retriever(
         vector_store,
-        k=8,
-        fetch_k=30,
+        k=k,
+        fetch_k=fetch_k,
     )
 
 

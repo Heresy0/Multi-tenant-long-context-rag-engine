@@ -1,37 +1,40 @@
 import requests
 from langchain_core.tools import tool
-from .rag import create_retriever
+from .retrieval_service import RetrievalService
 
 
-retriever = create_retriever()
+def create_search_knowledge_base_tool(
+        retrieval_service: RetrievalService,
+):
+    @tool
+    def search_knowledge_base(query: str) -> str:
+        """检索企业内部知识库。
+        当用户询问企业内部知识库相关问题时，调用此工具进行检索。
+        """
 
+        documents = retrieval_service.search(query)
 
-@tool
-def search_knowledge_base(query: str) -> str:
-    """检索企业内部知识库。
-    当用户询问企业内部知识库相关问题时，调用此工具进行检索。
-    """
+        if not documents:
+            return "未找到相关内容。"
 
-    documents = retriever.invoke(query)
+        results = []
 
-    if not documents:
-        return "未找到相关内容。"
+        for index,document in enumerate(documents, start=1):
+            source = document.metadata.get("source","未知来源")
+            page = document.metadata.get("page")
 
-    results = []
+            source_text = f"来源：{source}"
 
-    for index,document in enumerate(documents, start=1):
-        source = document.metadata.get("source","未知来源")
-        page = document.metadata.get("page")
+            if page is not None:
+                source_text += f",页码：{page + 1}"
 
-        source_text = f"来源：{source}"
-        if page is not None:
-            source_text += f",页码：{page + 1}"
+            results.append(
+                f"[资料{index}]\n"
+                f"{source_text}\n"
+                f"内容：{document.page_content}"
+            )
 
-        results.append(
-            f"[资料{index}]\n"
-            f"{source_text}\n"
-            f"内容：{document.page_content}"
-        )
+        return "\n\n".join(results)
 
-    return "\n\n".join(results)
+    return search_knowledge_base
 
