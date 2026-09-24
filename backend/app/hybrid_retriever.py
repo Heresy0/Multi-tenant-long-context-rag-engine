@@ -61,7 +61,7 @@ class HybridRetriever(BaseRetriever):
     """使用加权RRF融合向量检索和BM25检索。"""
 
     vector_retriever: BaseRetriever
-    keyword_retriever: BM25Retriever
+    keyword_retriever: BaseRetriever
 
     vector_weight: float = 0.6
     keyword_weight: float = 0.4
