@@ -20,7 +20,7 @@ class RetrievalService:
         return create_retriever(
             settings=self._settings,
             k=8,
-            fetch_k=20,
+            fetch_k=30,
         )
 
     def _get_retriever(self) -> BaseRetriever:

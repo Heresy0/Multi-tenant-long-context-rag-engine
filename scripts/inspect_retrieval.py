@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import sys
 import time
 import unicodedata
@@ -102,7 +103,12 @@ def matches_evidence(document, evidence: dict) -> bool:
     )
 
 
-def evaluate_case(retriever, case: dict, k: int) -> dict:
+def evaluate_case(
+    retriever,
+    case: dict,
+    k: int,
+    answerability_threshold: float | None = None,
+) -> dict:
     started = time.perf_counter()
 
     try:
@@ -123,6 +129,22 @@ def evaluate_case(retriever, case: dict, k: int) -> dict:
     latency_ms = round(
         (time.perf_counter() - started) * 1000, 2
     )
+
+    first_metadata = (
+        documents[0].metadata if documents else {}
+    )
+    top_rerank_score = first_metadata.get("rerank_score")
+
+    predicted_answerable = None
+
+    if answerability_threshold is not None:
+        if not documents:
+            predicted_answerable = False
+        elif isinstance(top_rerank_score, (int, float)):
+            predicted_answerable = (
+                float(top_rerank_score)
+                >= answerability_threshold
+            )
 
     hits = []
     first_relevant_rank = None
@@ -165,6 +187,17 @@ def evaluate_case(retriever, case: dict, k: int) -> dict:
         "answerable": case["answerable"],
         "status": "ok",
         "latency_ms": latency_ms,
+        "retrieval_latency_ms": first_metadata.get(
+            "retrieval_latency_ms"
+        ),
+        "rerank_latency_ms": first_metadata.get(
+            "rerank_latency_ms"
+        ),
+        "rerank_candidate_count": first_metadata.get(
+            "rerank_candidate_count"
+        ),
+        "top_rerank_score": top_rerank_score,
+        "predicted_answerable": predicted_answerable,
         "hit_at_k": (
             first_relevant_rank is not None if scored else None
         ),
@@ -177,6 +210,34 @@ def evaluate_case(retriever, case: dict, k: int) -> dict:
     }
 
 
+def percentile(
+    values: list[float],
+    quantile: float,
+) -> float | None:
+    """使用线性插值计算分位数。"""
+    if not values:
+        return None
+
+    if not 0 <= quantile <= 1:
+        raise ValueError("quantile 必须在 0 到 1 之间")
+
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * quantile
+    lower_index = math.floor(position)
+    upper_index = math.ceil(position)
+
+    if lower_index == upper_index:
+        return round(ordered[lower_index], 2)
+
+    weight = position - lower_index
+    interpolated = (
+        ordered[lower_index] * (1 - weight)
+        + ordered[upper_index] * weight
+    )
+
+    return round(interpolated, 2)
+
+
 def summarize(results: list[dict], k: int) -> dict:
     successful = [
         result for result in results
@@ -186,6 +247,54 @@ def summarize(results: list[dict], k: int) -> dict:
         result for result in successful
         if result["answerable"] is True
     ]
+    latencies = [
+        result["latency_ms"]
+        for result in successful
+    ]
+    retrieval_latencies = [
+        result["retrieval_latency_ms"]
+        for result in successful
+        if isinstance(
+            result.get("retrieval_latency_ms"),
+            (int, float),
+        )
+    ]
+    rerank_latencies = [
+        result["rerank_latency_ms"]
+        for result in successful
+        if isinstance(
+            result.get("rerank_latency_ms"),
+            (int, float),
+        )
+    ]
+    answerability_scored = [
+        result
+        for result in successful
+        if type(result.get("answerable")) is bool
+        and type(result.get("predicted_answerable")) is bool
+    ]
+    true_positive = sum(
+        result["answerable"] is True
+        and result["predicted_answerable"] is True
+        for result in answerability_scored
+    )
+    false_negative = sum(
+        result["answerable"] is True
+        and result["predicted_answerable"] is False
+        for result in answerability_scored
+    )
+    true_negative = sum(
+        result["answerable"] is False
+        and result["predicted_answerable"] is False
+        for result in answerability_scored
+    )
+    false_positive = sum(
+        result["answerable"] is False
+        and result["predicted_answerable"] is True
+        for result in answerability_scored
+    )
+    answerable_predictions = true_positive + false_negative
+    unanswerable_predictions = true_negative + false_positive
 
     return {
         "total": len(results),
@@ -213,12 +322,81 @@ def summarize(results: list[dict], k: int) -> dict:
         ),
         "mean_latency_ms": (
             round(
-                sum(result["latency_ms"] for result in successful)
-                / len(successful),
+                sum(latencies) / len(latencies),
                 2,
             )
-            if successful else None
+            if latencies else None
         ),
+        "p50_latency_ms": percentile(latencies, 0.50),
+        "p95_latency_ms": percentile(latencies, 0.95),
+        "mean_retrieval_latency_ms": (
+            round(
+                sum(retrieval_latencies)
+                / len(retrieval_latencies),
+                2,
+            )
+            if retrieval_latencies else None
+        ),
+        "p50_retrieval_latency_ms": percentile(
+            retrieval_latencies,
+            0.50,
+        ),
+        "p95_retrieval_latency_ms": percentile(
+            retrieval_latencies,
+            0.95,
+        ),
+        "mean_rerank_latency_ms": (
+            round(
+                sum(rerank_latencies)
+                / len(rerank_latencies),
+                2,
+            )
+            if rerank_latencies else None
+        ),
+        "p50_rerank_latency_ms": percentile(
+            rerank_latencies,
+            0.50,
+        ),
+        "p95_rerank_latency_ms": percentile(
+            rerank_latencies,
+            0.95,
+        ),
+        "answerability_scored": len(answerability_scored),
+        "answerability_accuracy": (
+            round(
+                (true_positive + true_negative)
+                / len(answerability_scored),
+                4,
+            )
+            if answerability_scored else None
+        ),
+        "answerable_accept_rate": (
+            round(
+                true_positive / answerable_predictions,
+                4,
+            )
+            if answerable_predictions else None
+        ),
+        "unanswerable_rejection_rate": (
+            round(
+                true_negative / unanswerable_predictions,
+                4,
+            )
+            if unanswerable_predictions else None
+        ),
+        "unanswerable_false_accept_rate": (
+            round(
+                false_positive / unanswerable_predictions,
+                4,
+            )
+            if unanswerable_predictions else None
+        ),
+        "answerability_confusion": {
+            "true_positive": true_positive,
+            "false_negative": false_negative,
+            "true_negative": true_negative,
+            "false_positive": false_positive,
+        },
     }
 
 
@@ -229,13 +407,24 @@ def main() -> int:
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument("--question", help="单个检索问题")
     inputs.add_argument("--dataset", type=Path, help="JSONL 题集")
-    parser.add_argument("--k", type=int, default=3)
-    parser.add_argument("--fetch-k", type=int, default=15)
+    parser.add_argument("--k", type=int, default=8)
+    parser.add_argument("--fetch-k", type=int, default=30)
+    parser.add_argument(
+        "--answerability-threshold",
+        type=float,
+        default=0.70,
+        help=(
+            "Top-1 重排分数低于该值时预测为无答案"
+        ),
+    )
     parser.add_argument("--output", type=Path, help="保存 JSON 报告")
     args = parser.parse_args()
 
     if args.k < 1 or args.fetch_k < args.k:
         parser.error("需要满足 fetch-k >= k >= 1")
+
+    if not 0 <= args.answerability_threshold <= 1:
+        parser.error("answerability-threshold 必须在 0 到 1 之间")
 
     if args.question is not None and not args.question.strip():
         parser.error("问题不能为空")
@@ -261,7 +450,12 @@ def main() -> int:
     )
 
     results = [
-        evaluate_case(retriever, case, args.k)
+        evaluate_case(
+            retriever,
+            case,
+            args.k,
+            args.answerability_threshold,
+        )
         for case in cases
     ]
 
@@ -270,6 +464,9 @@ def main() -> int:
         "config": {
             "search_type": retriever.search_type,
             "search_kwargs": dict(retriever.search_kwargs),
+            "answerability_threshold": (
+                args.answerability_threshold
+            ),
             "dataset": str(args.dataset) if args.dataset else None,
         },
         "summary": summarize(results, args.k),

@@ -230,7 +230,7 @@ def create_retriever(
         settings: Settings | None = None,
         *,
         k: int = 8,
-        fetch_k: int = 20,
+        fetch_k: int = 30,
 ) -> BaseRetriever:
     """创建企业知识库检索器。"""
 

@@ -1,4 +1,5 @@
 import logging
+import time
 
 from langchain_core.callbacks import (
     CallbackManagerForRetrieverRun,
@@ -52,10 +53,17 @@ class RerankRetriever(BaseRetriever):
         *,
         run_manager:CallbackManagerForRetrieverRun,
     ) -> list[Document]:
+        retrieval_started = time.perf_counter()
         candidates = self.base_retriever.invoke(query)
+        retrieval_latency_ms = round(
+            (time.perf_counter() - retrieval_started) * 1000,
+            2,
+        )
 
         if not candidates:
             return []
+
+        rerank_started = time.perf_counter()
 
         try:
             rerank_results = self.reranker.rerank(
@@ -68,6 +76,10 @@ class RerankRetriever(BaseRetriever):
             )
 
         except RerankError:
+            rerank_latency_ms = round(
+                (time.perf_counter() - rerank_started) * 1000,
+                2,
+            )
             logger.exception(
                 "重排序失败，降级为原始RRF顺序"
             )
@@ -77,6 +89,9 @@ class RerankRetriever(BaseRetriever):
                     document,
                     rerank_status="fallback",
                     final_rank=rank,
+                    retrieval_latency_ms=retrieval_latency_ms,
+                    rerank_latency_ms=rerank_latency_ms,
+                    rerank_candidate_count=len(candidates),
                 )
                 for rank,document in enumerate(
                     candidates[: self.top_n],
@@ -84,6 +99,10 @@ class RerankRetriever(BaseRetriever):
                 )
             ]
 
+        rerank_latency_ms = round(
+            (time.perf_counter() - rerank_started) * 1000,
+            2,
+        )
         results: list[Document] = []
 
         for final_rank, rerank_result in enumerate(
@@ -100,6 +119,9 @@ class RerankRetriever(BaseRetriever):
                         rerank_result.relevance_score
                     ),
                     final_rank=final_rank,
+                    retrieval_latency_ms=retrieval_latency_ms,
+                    rerank_latency_ms=rerank_latency_ms,
+                    rerank_candidate_count=len(candidates),
                 )
             )
 

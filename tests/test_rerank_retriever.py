@@ -122,6 +122,9 @@ def test_reranker_changes_candidate_order(monkeypatch) -> None:
         for document in results
     )
     assert results[0].metadata["rrf_rank"] == 3
+    assert results[0].metadata["retrieval_latency_ms"] >= 0
+    assert results[0].metadata["rerank_latency_ms"] >= 0
+    assert results[0].metadata["rerank_candidate_count"] == 3
 
 
 def test_reranker_failure_falls_back_to_rrf(monkeypatch) -> None:
@@ -150,3 +153,6 @@ def test_reranker_failure_falls_back_to_rrf(monkeypatch) -> None:
         "rerank_score" not in document.metadata
         for document in results
     )
+    assert results[0].metadata["retrieval_latency_ms"] >= 0
+    assert results[0].metadata["rerank_latency_ms"] >= 0
+    assert results[0].metadata["rerank_candidate_count"] == 3
