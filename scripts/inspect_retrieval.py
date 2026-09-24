@@ -149,6 +149,10 @@ def evaluate_case(retriever, case: dict, k: int) -> dict:
             "source": document.metadata.get("source"),
             "page": document.metadata.get("page"),
             "start_index": document.metadata.get("start_index"),
+            "rrf_rank": document.metadata.get("rrf_rank"),
+            "rrf_score": document.metadata.get("rrf_score"),
+            "rerank_score": document.metadata.get("rerank_score"),
+            "rerank_status": document.metadata.get("rerank_status"),
             "relevant": relevant,
             "content": document.page_content,
         })

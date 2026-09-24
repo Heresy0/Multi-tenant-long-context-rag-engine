@@ -35,3 +35,7 @@ class Settings:
         self.chroma_directory = PROJECT_ROOT / "data" / "chroma"
         # 使用新文件，避免和正在运行的命令行脚本共用数据库
         self.database_path = PROJECT_ROOT / "weather_api.sqlite"
+
+        self.rerank_model = required_env("DASHSCOPE_RERANK_MODEL")
+        self.rerank_url = required_env("DASHSCOPE_RERANK_URL")
+        self.rerank_timeout_seconds = float(required_env("RERANK_TIMEOUT_SECONDS"))

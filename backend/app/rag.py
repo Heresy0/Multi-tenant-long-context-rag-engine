@@ -18,6 +18,8 @@ from pathlib import Path
 from .prompts import RAGprompt
 from .document_splitter import split_docx
 from .hybrid_retriever import create_hybrid_retriever
+from .reranker import QwenReranker
+from .rerank_retriever import RerankRetriever
 
 
 COLLECTION_NAME = "enterprise_knowledge"
@@ -228,7 +230,7 @@ def create_retriever(
         settings: Settings | None = None,
         *,
         k: int = 8,
-        fetch_k: int = 30,
+        fetch_k: int = 20,
 ) -> BaseRetriever:
     """创建企业知识库检索器。"""
 
@@ -248,11 +250,28 @@ def create_retriever(
         embeddings = embeddings,
         )
 
-    return create_hybrid_retriever(
+    # 混合检索先返回 fetch_k 个候选，而不是最终 k 个结果
+    hybrid_retriever = create_hybrid_retriever(
         vector_store,
-        k=k,
+        k=fetch_k,
         fetch_k=fetch_k,
     )
 
+    reranker = QwenReranker(
+        endpoint=settings.rerank_url,
+        api_key=settings.chat_api_key,
+        model=settings.rerank_model,
+        timeout_seconds=settings.rerank_timeout_seconds,
+    )
+
+    return RerankRetriever(
+        base_retriever=hybrid_retriever,
+        reranker=reranker,
+        top_n=k,
+        search_kwargs={
+            "k": k,
+            "fetch_k": fetch_k,
+        },
+)
 
 

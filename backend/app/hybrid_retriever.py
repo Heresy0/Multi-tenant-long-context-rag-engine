@@ -125,10 +125,33 @@ class HybridRetriever(BaseRetriever):
             reverse=True,
         )
 
-        return [
-            documents[key]
-            for key in sorted_keys[:k]
-        ]
+        results: list[Document] = []
+
+        for rrf_rank, key in enumerate(
+            sorted_keys[:k],
+            start=1,
+        ):
+            document = documents[key]
+            metadata = dict(document.metadata)
+
+            metadata.update({
+                "rrf_score": scores[key],
+                "rrf_rank": rrf_rank,
+            })
+
+            kwargs = {
+                "page_content": document.page_content,
+                "metadata": metadata,
+            }
+
+            document_id = getattr(document, "id", None)
+
+            if document_id is not None:
+                kwargs["id"] = document_id
+
+            results.append(Document(**kwargs))
+
+        return results
 
 def create_hybrid_retriever(
         vector_store: Chroma,
