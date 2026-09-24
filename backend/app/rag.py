@@ -10,8 +10,6 @@ from langchain_openai import OpenAIEmbeddings
 # 向量数据库
 from langchain_chroma import Chroma
 # 提示词和输出解析
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
 from .config import Settings
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import (create_stuff_documents_chain,)
@@ -19,6 +17,7 @@ from langchain_core.retrievers import BaseRetriever
 from pathlib import Path
 from .prompts import RAGprompt
 from .document_splitter import split_docx
+from .hybrid_retriever import create_hybrid_retriever
 
 
 COLLECTION_NAME = "enterprise_knowledge"
@@ -231,12 +230,10 @@ def create_retriever(settings: Settings | None = None,
         embeddings = embeddings,
         )
 
-    return vector_store.as_retriever(
-        search_type="mmr",
-        search_kwargs={
-            "k": 8,
-            "fetch_k": 30
-        }
+    return create_hybrid_retriever(
+        vector_store,
+        k=8,
+        fetch_k=30,
     )
 
 
