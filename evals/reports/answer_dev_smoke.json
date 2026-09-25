@@ -1,0 +1,148 @@
+{
+  "created_at": "2026-09-25T15:08:36.056078+00:00",
+  "config": {
+    "dataset": "evals\\datasets\\answer_dev.jsonl",
+    "endpoint": "http://127.0.0.1:8000/api/qa",
+    "timeout_seconds": 120.0,
+    "limit": 3,
+    "delay_ms": 0.0
+  },
+  "summary": {
+    "total": 3,
+    "successful": 3,
+    "errors": 0,
+    "answerable": 3,
+    "unanswerable": 0,
+    "answerability_accuracy": 1.0,
+    "answerable_accept_rate": 1.0,
+    "unanswerable_rejection_rate": null,
+    "unanswerable_false_accept_rate": null,
+    "answerability_confusion": {
+      "true_positive": 3,
+      "false_negative": 0,
+      "true_negative": 0,
+      "false_positive": 0
+    },
+    "required_fact_coverage": 0.8571,
+    "fact_complete_rate": 0.6667,
+    "citation_source_precision": 0.6,
+    "citation_source_recall": 1.0,
+    "citation_case_hit_rate": 1.0,
+    "unanswerable_citation_free_rate": null,
+    "mean_latency_ms": 14823.33,
+    "p50_latency_ms": 15274.9,
+    "p95_latency_ms": 17950.9
+  },
+  "results": [
+    {
+      "id": "ans-dev-hr-001",
+      "category": "hr",
+      "difficulty": "medium",
+      "question": "公司允许弹性到岗的时间范围和核心在线时段分别是什么？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 15274.9,
+      "answer": "公司允许员工在08:00至10:00之间弹性到岗。[资料1]\n核心在线时段为10:00至17:00，员工在该时段必须在线。[资料1]",
+      "reference_answer": "员工可以在08:00至10:00之间弹性到岗；核心在线时段为10:00至17:00，员工必须在线。",
+      "refusal_reason": null,
+      "required_facts": [
+        "08:00至10:00",
+        "10:00至17:00"
+      ],
+      "matched_facts": [
+        "08:00至10:00",
+        "10:00至17:00"
+      ],
+      "missing_facts": [
+        "8小时"
+      ],
+      "fact_complete": false,
+      "expected_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "cited_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "matched_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-hr-002",
+      "category": "hr",
+      "difficulty": "medium",
+      "question": "因公司安排没休完的年假最多能结转几天，最迟什么时候用完？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 10946.87,
+      "answer": "因公司书面安排无法休完的年假，经人力资源部确认后，最多可结转5个工作日。[资料1][资料2]\n结转的年假应在次年3月31日前使用。[资料1][资料2]",
+      "reference_answer": "经人力资源部确认，因公司安排未休完的年假最多可结转5个工作日，并应在次年3月31日前使用完毕。",
+      "refusal_reason": null,
+      "required_facts": [
+        "5个工作日",
+        "次年3月31日前"
+      ],
+      "matched_facts": [
+        "5个工作日",
+        "次年3月31日前"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "cited_documents": [
+        "01_人事考勤与休假管理制度.docx",
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "matched_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "unexpected_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-hr-003",
+      "category": "hr",
+      "difficulty": "medium",
+      "question": "员工突发病假来不及走系统时应该如何补办？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 18248.23,
+      "answer": "员工突发紧急病假来不及走系统时，可以先通过即时通讯告知直属经理。[资料1]\n员工应在返岗后2个工作日内补齐病假申请。[资料1][资料4]\n如果连续病假达到2个工作日或以上，还需要补充医疗证明。[资料4][资料5]",
+      "reference_answer": "员工可先通过即时通讯告知直属经理，并在返岗后2个工作日内补齐病假申请。",
+      "refusal_reason": null,
+      "required_facts": [
+        "即时通讯告知直属经理",
+        "返岗后2个工作日内"
+      ],
+      "matched_facts": [
+        "即时通讯告知直属经理",
+        "返岗后2个工作日内"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "cited_documents": [
+        "01_人事考勤与休假管理制度.docx",
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "matched_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "unexpected_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "citation_source_hit": true
+    }
+  ]
+}

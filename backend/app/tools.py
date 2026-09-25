@@ -1,40 +1,27 @@
-import requests
 from langchain_core.tools import tool
 from .retrieval_service import RetrievalService
+from .context_builder import ContextBuilder
 
 
 def create_search_knowledge_base_tool(
-        retrieval_service: RetrievalService,
+    retrieval_service: RetrievalService,
 ):
+    context_builder = ContextBuilder(
+        max_characters=12000,
+        max_chunks_per_source=4,
+    )
+
     @tool
     def search_knowledge_base(query: str) -> str:
-        """检索企业内部知识库。
-        当用户询问企业内部知识库相关问题时，调用此工具进行检索。
-        """
+        """检索企业内部知识库。"""
 
         documents = retrieval_service.search(query)
+        context = context_builder.build(documents)
 
-        if not documents:
-            return "未找到相关内容。"
+        if not context.items:
+            return "未找到能够回答问题的知识库资料。"
 
-        results = []
-
-        for index,document in enumerate(documents, start=1):
-            source = document.metadata.get("source","未知来源")
-            page = document.metadata.get("page")
-
-            source_text = f"来源：{source}"
-
-            if page is not None:
-                source_text += f",页码：{page + 1}"
-
-            results.append(
-                f"[资料{index}]\n"
-                f"{source_text}\n"
-                f"内容：{document.page_content}"
-            )
-
-        return "\n\n".join(results)
+        return context.text
 
     return search_knowledge_base
 

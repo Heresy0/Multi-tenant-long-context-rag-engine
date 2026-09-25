@@ -1,0 +1,220 @@
+{
+  "created_at": "2026-09-25T16:14:54.863529+00:00",
+  "config": {
+    "dataset": "evals\\datasets\\answer_dev.jsonl",
+    "endpoint": "http://127.0.0.1:8000/api/qa",
+    "timeout_seconds": 120.0,
+    "limit": 3,
+    "delay_ms": 0.0
+  },
+  "summary": {
+    "total": 3,
+    "successful": 3,
+    "errors": 0,
+    "answerable": 3,
+    "unanswerable": 0,
+    "answerability_accuracy": 1.0,
+    "answerable_accept_rate": 1.0,
+    "unanswerable_rejection_rate": null,
+    "unanswerable_false_accept_rate": null,
+    "answerability_confusion": {
+      "true_positive": 3,
+      "false_negative": 0,
+      "true_negative": 0,
+      "false_positive": 0
+    },
+    "required_fact_coverage": 1.0,
+    "fact_complete_rate": 1.0,
+    "citation_source_precision": 1.0,
+    "citation_source_recall": 1.0,
+    "citation_case_hit_rate": 1.0,
+    "unanswerable_citation_free_rate": null,
+    "mean_latency_ms": 14076.12,
+    "p50_latency_ms": 14304.64,
+    "p95_latency_ms": 15759.86,
+    "stage_latency": {
+      "hybrid_retrieval_ms": {
+        "count": 3,
+        "mean_ms": 208.23,
+        "p50_ms": 186.86,
+        "p95_ms": 252.74
+      },
+      "rerank_ms": {
+        "count": 3,
+        "mean_ms": 822.09,
+        "p50_ms": 807.54,
+        "p95_ms": 862.39
+      },
+      "search_total_ms": {
+        "count": 3,
+        "mean_ms": 2577.39,
+        "p50_ms": 1046.58,
+        "p95_ms": 5242.06
+      },
+      "context_build_ms": {
+        "count": 3,
+        "mean_ms": 0.07,
+        "p50_ms": 0.07,
+        "p95_ms": 0.07
+      },
+      "generation_ms": {
+        "count": 3,
+        "mean_ms": 11471.75,
+        "p50_ms": 11017.73,
+        "p95_ms": 13014.98
+      },
+      "validation_ms": {
+        "count": 3,
+        "mean_ms": 0.34,
+        "p50_ms": 0.39,
+        "p95_ms": 0.46
+      },
+      "render_ms": {
+        "count": 3,
+        "mean_ms": 0.03,
+        "p50_ms": 0.03,
+        "p95_ms": 0.03
+      },
+      "total_ms": {
+        "count": 3,
+        "mean_ms": 14049.6,
+        "p50_ms": 14283.74,
+        "p95_ms": 15710.89
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "ans-dev-hr-001",
+      "category": "hr",
+      "difficulty": "medium",
+      "question": "公司允许弹性到岗的时间范围和核心在线时段分别是什么？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 15921.55,
+      "timings": {
+        "hybrid_retrieval_ms": 260.06,
+        "rerank_ms": 807.54,
+        "search_total_ms": 5708.22,
+        "context_build_ms": 0.07,
+        "generation_ms": 10160.63,
+        "validation_ms": 0.47,
+        "render_ms": 0.03,
+        "total_ms": 15869.46
+      },
+      "answer": "公司允许员工在08:00至10:00之间弹性到岗。[资料1]\n核心在线时段为10:00至17:00，员工在该时段必须在线。[资料1]",
+      "reference_answer": "员工可以在08:00至10:00之间弹性到岗；核心在线时段为10:00至17:00，员工必须在线。",
+      "refusal_reason": null,
+      "required_facts": [
+        "08:00至10:00",
+        "10:00至17:00"
+      ],
+      "matched_facts": [
+        "08:00至10:00",
+        "10:00至17:00"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "cited_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "matched_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-hr-002",
+      "category": "hr",
+      "difficulty": "medium",
+      "question": "因公司安排没休完的年假最多能结转几天，最迟什么时候用完？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 12002.16,
+      "timings": {
+        "hybrid_retrieval_ms": 186.86,
+        "rerank_ms": 790.24,
+        "search_total_ms": 977.37,
+        "context_build_ms": 0.07,
+        "generation_ms": 11017.73,
+        "validation_ms": 0.39,
+        "render_ms": 0.03,
+        "total_ms": 11995.61
+      },
+      "answer": "因公司安排无法休完的年假，经人力资源部确认后最多可结转5个工作日。[资料2]\n结转的年假须在次年3月31日前使用。[资料2]",
+      "reference_answer": "经人力资源部确认，因公司安排未休完的年假最多可结转5个工作日，并应在次年3月31日前使用完毕。",
+      "refusal_reason": null,
+      "required_facts": [
+        "5个工作日",
+        "次年3月31日前"
+      ],
+      "matched_facts": [
+        "5个工作日",
+        "次年3月31日前"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "cited_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "matched_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-hr-003",
+      "category": "hr",
+      "difficulty": "medium",
+      "question": "员工突发病假来不及走系统时应该如何补办？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 14304.64,
+      "timings": {
+        "hybrid_retrieval_ms": 177.78,
+        "rerank_ms": 868.49,
+        "search_total_ms": 1046.58,
+        "context_build_ms": 0.06,
+        "generation_ms": 13236.9,
+        "validation_ms": 0.16,
+        "render_ms": 0.02,
+        "total_ms": 14283.74
+      },
+      "answer": "员工突发紧急病假来不及走系统时，可先通过即时通讯告知直属经理，并在返岗后2个工作日内补齐申请。[资料1]",
+      "reference_answer": "员工可先通过即时通讯告知直属经理，并在返岗后2个工作日内补齐病假申请。",
+      "refusal_reason": null,
+      "required_facts": [
+        "即时通讯告知直属经理",
+        "返岗后2个工作日内"
+      ],
+      "matched_facts": [
+        "即时通讯告知直属经理",
+        "返岗后2个工作日内"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "cited_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "matched_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    }
+  ]
+}

@@ -1,0 +1,1458 @@
+{
+  "created_at": "2026-09-25T16:25:22.009515+00:00",
+  "config": {
+    "dataset": "evals\\datasets\\answer_dev.jsonl",
+    "endpoint": "http://127.0.0.1:8000/api/qa",
+    "timeout_seconds": 120.0,
+    "limit": null,
+    "delay_ms": 0.0
+  },
+  "summary": {
+    "total": 32,
+    "successful": 32,
+    "errors": 0,
+    "answerable": 24,
+    "unanswerable": 8,
+    "answerability_accuracy": 1.0,
+    "answerable_accept_rate": 1.0,
+    "unanswerable_rejection_rate": 1.0,
+    "unanswerable_false_accept_rate": 0.0,
+    "answerability_confusion": {
+      "true_positive": 24,
+      "false_negative": 0,
+      "true_negative": 8,
+      "false_positive": 0
+    },
+    "required_fact_coverage": 1.0,
+    "fact_complete_rate": 1.0,
+    "citation_source_precision": 1.0,
+    "citation_source_recall": 1.0,
+    "citation_case_hit_rate": 1.0,
+    "unanswerable_citation_free_rate": 1.0,
+    "mean_latency_ms": 11141.01,
+    "p50_latency_ms": 10308.1,
+    "p95_latency_ms": 17549.31,
+    "stage_latency": {
+      "hybrid_retrieval_ms": {
+        "count": 32,
+        "mean_ms": 243.37,
+        "p50_ms": 192.48,
+        "p95_ms": 420.27
+      },
+      "rerank_ms": {
+        "count": 32,
+        "mean_ms": 848.52,
+        "p50_ms": 823.84,
+        "p95_ms": 943.75
+      },
+      "search_total_ms": {
+        "count": 32,
+        "mean_ms": 1092.2,
+        "p50_ms": 1031.6,
+        "p95_ms": 1331.37
+      },
+      "context_build_ms": {
+        "count": 32,
+        "mean_ms": 0.07,
+        "p50_ms": 0.06,
+        "p95_ms": 0.09
+      },
+      "generation_ms": {
+        "count": 32,
+        "mean_ms": 10031.7,
+        "p50_ms": 9218.9,
+        "p95_ms": 16434.57
+      },
+      "validation_ms": {
+        "count": 32,
+        "mean_ms": 0.25,
+        "p50_ms": 0.21,
+        "p95_ms": 0.72
+      },
+      "render_ms": {
+        "count": 32,
+        "mean_ms": 0.03,
+        "p50_ms": 0.03,
+        "p95_ms": 0.05
+      },
+      "total_ms": {
+        "count": 32,
+        "mean_ms": 11124.27,
+        "p50_ms": 10280.82,
+        "p95_ms": 17544.08
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "ans-dev-hr-001",
+      "category": "hr",
+      "difficulty": "medium",
+      "question": "公司允许弹性到岗的时间范围和核心在线时段分别是什么？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 9460.57,
+      "timings": {
+        "hybrid_retrieval_ms": 267.23,
+        "rerank_ms": 953.45,
+        "search_total_ms": 1221.01,
+        "context_build_ms": 0.06,
+        "generation_ms": 8215.38,
+        "validation_ms": 0.46,
+        "render_ms": 0.03,
+        "total_ms": 9436.96
+      },
+      "answer": "允许弹性到岗的时间范围为08:00至10:00之间。[资料1]\n核心在线时段为10:00至17:00。[资料1]",
+      "reference_answer": "员工可以在08:00至10:00之间弹性到岗；核心在线时段为10:00至17:00，员工必须在线。",
+      "refusal_reason": null,
+      "required_facts": [
+        "08:00至10:00",
+        "10:00至17:00"
+      ],
+      "matched_facts": [
+        "08:00至10:00",
+        "10:00至17:00"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "cited_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "matched_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-hr-002",
+      "category": "hr",
+      "difficulty": "medium",
+      "question": "因公司安排没休完的年假最多能结转几天，最迟什么时候用完？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 10331.41,
+      "timings": {
+        "hybrid_retrieval_ms": 296.29,
+        "rerank_ms": 834.57,
+        "search_total_ms": 1131.15,
+        "context_build_ms": 0.06,
+        "generation_ms": 9174.06,
+        "validation_ms": 0.81,
+        "render_ms": 0.03,
+        "total_ms": 10306.15
+      },
+      "answer": "因公司安排没休完的年假最多结转5个工作日。[资料2]\n结转的年假须在次年3月31日前使用。[资料2]",
+      "reference_answer": "经人力资源部确认，因公司安排未休完的年假最多可结转5个工作日，并应在次年3月31日前使用完毕。",
+      "refusal_reason": null,
+      "required_facts": [
+        "5个工作日",
+        "次年3月31日前"
+      ],
+      "matched_facts": [
+        "5个工作日",
+        "次年3月31日前"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "cited_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "matched_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-hr-003",
+      "category": "hr",
+      "difficulty": "medium",
+      "question": "员工突发病假来不及走系统时应该如何补办？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 10284.78,
+      "timings": {
+        "hybrid_retrieval_ms": 182.23,
+        "rerank_ms": 808.93,
+        "search_total_ms": 991.47,
+        "context_build_ms": 0.06,
+        "generation_ms": 9263.75,
+        "validation_ms": 0.16,
+        "render_ms": 0.03,
+        "total_ms": 10255.49
+      },
+      "answer": "员工突发紧急病假来不及走系统时，可先通过即时通讯告知直属经理，并在返岗后2个工作日内补齐申请。[资料1]",
+      "reference_answer": "员工可先通过即时通讯告知直属经理，并在返岗后2个工作日内补齐病假申请。",
+      "refusal_reason": null,
+      "required_facts": [
+        "即时通讯告知直属经理",
+        "返岗后2个工作日内"
+      ],
+      "matched_facts": [
+        "即时通讯告知直属经理",
+        "返岗后2个工作日内"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "cited_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "matched_documents": [
+        "01_人事考勤与休假管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-fin-001",
+      "category": "finance",
+      "difficulty": "medium",
+      "question": "国内差旅预算超过3000元由谁审批，境外差旅还需要谁批准？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 13481.21,
+      "timings": {
+        "hybrid_retrieval_ms": 449.21,
+        "rerank_ms": 807.98,
+        "search_total_ms": 1257.51,
+        "context_build_ms": 0.06,
+        "generation_ms": 12192.82,
+        "validation_ms": 0.25,
+        "render_ms": 0.03,
+        "total_ms": 13450.71
+      },
+      "answer": "预计总额超过3000元的国内差旅由部门负责人审批。[资料1]\n任何境外差旅还需财务负责人和总经理审批。[资料1]",
+      "reference_answer": "预计总额超过3000元的国内差旅由部门负责人审批；任何境外差旅还需财务负责人和总经理批准。",
+      "refusal_reason": null,
+      "required_facts": [
+        "超过3000元",
+        "部门负责人",
+        "财务负责人",
+        "总经理"
+      ],
+      "matched_facts": [
+        "超过3000元",
+        "部门负责人",
+        "财务负责人",
+        "总经理"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "02_差旅与费用报销管理制度.docx"
+      ],
+      "cited_documents": [
+        "02_差旅与费用报销管理制度.docx"
+      ],
+      "matched_documents": [
+        "02_差旅与费用报销管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-fin-002",
+      "category": "finance",
+      "difficulty": "medium",
+      "question": "普通员工和部门负责人在A类城市的住宿上限各是多少？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 28457.32,
+      "timings": {
+        "hybrid_retrieval_ms": 182.99,
+        "rerank_ms": 814.82,
+        "search_total_ms": 998.18,
+        "context_build_ms": 0.09,
+        "generation_ms": 27440.09,
+        "validation_ms": 0.65,
+        "render_ms": 0.06,
+        "total_ms": 28439.11
+      },
+      "answer": "普通员工在A类城市的住宿上限为每晚不超过650元。[资料2]\n部门负责人及以上在A类城市的住宿上限为每晚不超过850元。[资料2]",
+      "reference_answer": "A类城市住宿标准中，普通员工每晚不超过650元，部门负责人每晚不超过850元。",
+      "refusal_reason": null,
+      "required_facts": [
+        "普通员工",
+        "650元",
+        "部门负责人",
+        "850元"
+      ],
+      "matched_facts": [
+        "普通员工",
+        "650元",
+        "部门负责人",
+        "850元"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "02_差旅与费用报销管理制度.docx"
+      ],
+      "cited_documents": [
+        "02_差旅与费用报销管理制度.docx"
+      ],
+      "matched_documents": [
+        "02_差旅与费用报销管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-fin-003",
+      "category": "finance",
+      "difficulty": "easy",
+      "question": "费用发生或者行程结束后最迟多少天提交报销？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 9201.23,
+      "timings": {
+        "hybrid_retrieval_ms": 208.05,
+        "rerank_ms": 847.04,
+        "search_total_ms": 1055.37,
+        "context_build_ms": 0.07,
+        "generation_ms": 8140.61,
+        "validation_ms": 0.15,
+        "render_ms": 0.02,
+        "total_ms": 9196.24
+      },
+      "answer": "费用发生或者行程结束后，最迟应在10个自然日内提交报销。[资料2]",
+      "reference_answer": "员工应在行程结束或费用发生后10个自然日内提交报销单。",
+      "refusal_reason": null,
+      "required_facts": [
+        "10个自然日内"
+      ],
+      "matched_facts": [
+        "10个自然日内"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "02_差旅与费用报销管理制度.docx"
+      ],
+      "cited_documents": [
+        "02_差旅与费用报销管理制度.docx"
+      ],
+      "matched_documents": [
+        "02_差旅与费用报销管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-sec-001",
+      "category": "security",
+      "difficulty": "hard",
+      "question": "内部级数据的典型示例、外发要求和默认保留期是什么？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 11963.91,
+      "timings": {
+        "hybrid_retrieval_ms": 214.48,
+        "rerank_ms": 794.09,
+        "search_total_ms": 1008.94,
+        "context_build_ms": 0.09,
+        "generation_ms": 10928.42,
+        "validation_ms": 0.84,
+        "render_ms": 0.07,
+        "total_ms": 11938.41
+      },
+      "answer": "内部级数据的典型示例包括一般流程、内部通讯录和培训材料。[资料1]\n内部级数据仅限员工和获批协作方访问，外发需业务负责人批准。[资料1]\n内部级数据的默认保留期为3年。[资料1]",
+      "reference_answer": "内部级数据包括一般流程、内部通讯录和培训材料，仅限员工及获批协作方使用；外发需业务负责人批准，默认保留期为3年。",
+      "refusal_reason": null,
+      "required_facts": [
+        "一般流程",
+        "内部通讯录",
+        "培训材料",
+        "外发",
+        "业务负责人批准",
+        "3年"
+      ],
+      "matched_facts": [
+        "一般流程",
+        "内部通讯录",
+        "培训材料",
+        "外发",
+        "业务负责人批准",
+        "3年"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "03_信息安全与数据分级管理制度.docx"
+      ],
+      "cited_documents": [
+        "03_信息安全与数据分级管理制度.docx"
+      ],
+      "matched_documents": [
+        "03_信息安全与数据分级管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-sec-002",
+      "category": "security",
+      "difficulty": "medium",
+      "question": "哪些企业数据不能输入未经批准的生成式AI或在线调试服务？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 17480.13,
+      "timings": {
+        "hybrid_retrieval_ms": 396.14,
+        "rerank_ms": 816.2,
+        "search_total_ms": 1212.64,
+        "context_build_ms": 0.07,
+        "generation_ms": 16261.47,
+        "validation_ms": 0.21,
+        "render_ms": 0.02,
+        "total_ms": 17474.43
+      },
+      "answer": "不能输入未经公司批准的生成式人工智能、翻译、文件转换或在线调试服务的企业数据包括：客户数据、源代码、密钥、未公开合同或个人敏感信息。[资料1]",
+      "reference_answer": "不得将客户数据、源代码、密钥、未公开合同或个人敏感信息输入未经公司批准的生成式AI、翻译、文件转换或在线调试服务。",
+      "refusal_reason": null,
+      "required_facts": [
+        "客户数据",
+        "源代码",
+        "密钥",
+        "未公开合同",
+        "个人敏感信息"
+      ],
+      "matched_facts": [
+        "客户数据",
+        "源代码",
+        "密钥",
+        "未公开合同",
+        "个人敏感信息"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "03_信息安全与数据分级管理制度.docx"
+      ],
+      "cited_documents": [
+        "03_信息安全与数据分级管理制度.docx"
+      ],
+      "matched_documents": [
+        "03_信息安全与数据分级管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-sec-003",
+      "category": "security",
+      "difficulty": "medium",
+      "question": "发现数据误发或密钥泄露后，应在多长时间内通过什么渠道报告？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 11996.4,
+      "timings": {
+        "hybrid_retrieval_ms": 376.65,
+        "rerank_ms": 822.09,
+        "search_total_ms": 1199.08,
+        "context_build_ms": 0.09,
+        "generation_ms": 10775.27,
+        "validation_ms": 0.22,
+        "render_ms": 0.02,
+        "total_ms": 11974.71
+      },
+      "answer": "发现数据误发或密钥泄露后，应在30分钟内报告。[资料1]\n报告渠道为安全热线或事件系统。[资料1]",
+      "reference_answer": "发现数据误发或密钥泄露后，应在30分钟内通过安全热线或事件系统报告。",
+      "refusal_reason": null,
+      "required_facts": [
+        "30分钟内",
+        "安全热线",
+        "事件系统"
+      ],
+      "matched_facts": [
+        "30分钟内",
+        "安全热线",
+        "事件系统"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "03_信息安全与数据分级管理制度.docx"
+      ],
+      "cited_documents": [
+        "03_信息安全与数据分级管理制度.docx"
+      ],
+      "matched_documents": [
+        "03_信息安全与数据分级管理制度.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-ops-001",
+      "category": "procurement",
+      "difficulty": "medium",
+      "question": "金额在5000元以上至50000元的采购需要几家报价，由谁批准？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 12710.59,
+      "timings": {
+        "hybrid_retrieval_ms": 396.59,
+        "rerank_ms": 817.7,
+        "search_total_ms": 1214.62,
+        "context_build_ms": 0.06,
+        "generation_ms": 11470.28,
+        "validation_ms": 0.29,
+        "render_ms": 0.02,
+        "total_ms": 12685.31
+      },
+      "answer": "金额在5000元以上至50000元的采购需要至少2家有效报价。[资料1]\n金额在5000元以上至50000元的采购由部门负责人批准。[资料1]",
+      "reference_answer": "金额在5000元以上至50000元的采购至少2家有效报价，由部门负责人批准，并形成比价记录。",
+      "refusal_reason": null,
+      "required_facts": [
+        "至少2家有效报价",
+        "部门负责人"
+      ],
+      "matched_facts": [
+        "至少2家有效报价",
+        "部门负责人"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "04_采购与供应商准入流程手册.docx"
+      ],
+      "cited_documents": [
+        "04_采购与供应商准入流程手册.docx"
+      ],
+      "matched_documents": [
+        "04_采购与供应商准入流程手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-ops-002",
+      "category": "procurement",
+      "difficulty": "hard",
+      "question": "什么情况下供应商会被认定为关键供应商？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 10863.01,
+      "timings": {
+        "hybrid_retrieval_ms": 189.64,
+        "rerank_ms": 823.83,
+        "search_total_ms": 1013.79,
+        "context_build_ms": 0.06,
+        "generation_ms": 9822.39,
+        "validation_ms": 0.17,
+        "render_ms": 0.02,
+        "total_ms": 10836.45
+      },
+      "answer": "满足以下任一条件的供应商会被认定为关键供应商：服务中断会使核心业务超过4小时不可用；处理机密或严格机密数据；年度采购金额超过300000元；提供不可替代的生产基础设施；或者合同退出预计超过30日。[资料1]",
+      "reference_answer": "供应商满足以下任一情形会被认定为关键供应商：服务中断会导致核心业务超过4小时不可用；处理机密或严格机密数据；年度采购金额超过300000元；提供不可替代的生产基础设施；或合同退出预计超过30日。",
+      "refusal_reason": null,
+      "required_facts": [
+        "核心业务超过4小时不可用",
+        "机密或严格机密数据",
+        "年度采购金额超过300000元",
+        "不可替代的生产基础设施",
+        "合同退出预计超过30日"
+      ],
+      "matched_facts": [
+        "核心业务超过4小时不可用",
+        "机密或严格机密数据",
+        "年度采购金额超过300000元",
+        "不可替代的生产基础设施",
+        "合同退出预计超过30日"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "04_采购与供应商准入流程手册.docx"
+      ],
+      "cited_documents": [
+        "04_采购与供应商准入流程手册.docx"
+      ],
+      "matched_documents": [
+        "04_采购与供应商准入流程手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-ops-003",
+      "category": "procurement",
+      "difficulty": "medium",
+      "question": "超过5万元的单一来源采购需要哪些负责人共同批准？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 9949.1,
+      "timings": {
+        "hybrid_retrieval_ms": 197.44,
+        "rerank_ms": 835.17,
+        "search_total_ms": 1032.92,
+        "context_build_ms": 0.07,
+        "generation_ms": 8889.31,
+        "validation_ms": 0.15,
+        "render_ms": 0.03,
+        "total_ms": 9922.49
+      },
+      "answer": "金额超过5万元的单一来源采购需要部门负责人、运营管理部负责人和财务负责人共同批准。[资料1]",
+      "reference_answer": "金额超过5万元的单一来源采购，需要部门负责人、运营管理部负责人和财务负责人共同批准。",
+      "refusal_reason": null,
+      "required_facts": [
+        "部门负责人",
+        "运营管理部负责人",
+        "财务负责人"
+      ],
+      "matched_facts": [
+        "部门负责人",
+        "运营管理部负责人",
+        "财务负责人"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "04_采购与供应商准入流程手册.docx"
+      ],
+      "cited_documents": [
+        "04_采购与供应商准入流程手册.docx"
+      ],
+      "matched_documents": [
+        "04_采购与供应商准入流程手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-pmo-001",
+      "category": "project",
+      "difficulty": "easy",
+      "question": "项目测试阶段进入下一阶段前，对缺陷有什么要求？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 8820.24,
+      "timings": {
+        "hybrid_retrieval_ms": 214.89,
+        "rerank_ms": 907.64,
+        "search_total_ms": 1122.82,
+        "context_build_ms": 0.05,
+        "generation_ms": 7692.29,
+        "validation_ms": 0.34,
+        "render_ms": 0.02,
+        "total_ms": 8815.55
+      },
+      "answer": "项目测试阶段进入下一阶段前，要求阻断缺陷清零，其他缺陷有处置计划。[资料1]",
+      "reference_answer": "进入下一阶段前，应做到阻断缺陷清零，其他缺陷有处置计划。",
+      "refusal_reason": null,
+      "required_facts": [
+        "阻断缺陷清零",
+        "其他缺陷有处置计划"
+      ],
+      "matched_facts": [
+        "阻断缺陷清零",
+        "其他缺陷有处置计划"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "05_客户项目交付与变更管理流程手册.docx"
+      ],
+      "cited_documents": [
+        "05_客户项目交付与变更管理流程手册.docx"
+      ],
+      "matched_documents": [
+        "05_客户项目交付与变更管理流程手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-pmo-002",
+      "category": "project",
+      "difficulty": "easy",
+      "question": "紧急变更恢复后，应在多久内补齐完整记录和审批？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 7971.29,
+      "timings": {
+        "hybrid_retrieval_ms": 192.0,
+        "rerank_ms": 830.2,
+        "search_total_ms": 1022.5,
+        "context_build_ms": 0.06,
+        "generation_ms": 6929.32,
+        "validation_ms": 0.19,
+        "render_ms": 0.03,
+        "total_ms": 7952.14
+      },
+      "answer": "紧急变更恢复后，完整记录和补充审批应在恢复后1个工作日内完成。[资料1]",
+      "reference_answer": "紧急变更恢复后，应在1个工作日内补齐完整记录和补充审批。",
+      "refusal_reason": null,
+      "required_facts": [
+        "1个工作日内",
+        "完整记录",
+        "补充审批"
+      ],
+      "matched_facts": [
+        "1个工作日内",
+        "完整记录",
+        "补充审批"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "05_客户项目交付与变更管理流程手册.docx"
+      ],
+      "cited_documents": [
+        "05_客户项目交付与变更管理流程手册.docx"
+      ],
+      "matched_documents": [
+        "05_客户项目交付与变更管理流程手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-pmo-003",
+      "category": "project",
+      "difficulty": "hard",
+      "question": "项目默认质保期多长，哪些情况不在质保范围内？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 17633.87,
+      "timings": {
+        "hybrid_retrieval_ms": 192.96,
+        "rerank_ms": 789.36,
+        "search_total_ms": 982.67,
+        "context_build_ms": 0.06,
+        "generation_ms": 16646.14,
+        "validation_ms": 0.26,
+        "render_ms": 0.04,
+        "total_ms": 17629.2
+      },
+      "answer": "除合同另有约定，项目默认质保期为最终验收后90日。[资料1]\n质保仅覆盖已交付范围内的缺陷，不包含新增需求、第三方服务变化或客户未经批准的环境修改。[资料1]",
+      "reference_answer": "项目默认质保期为最终验收后90日。质保只覆盖已交付范围内的缺陷，不包括新增需求、第三方服务变化或客户未经批准的环境修改。",
+      "refusal_reason": null,
+      "required_facts": [
+        "最终验收后90日",
+        "新增需求",
+        "第三方服务变化",
+        "客户未经批准的环境修改"
+      ],
+      "matched_facts": [
+        "最终验收后90日",
+        "新增需求",
+        "第三方服务变化",
+        "客户未经批准的环境修改"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "05_客户项目交付与变更管理流程手册.docx"
+      ],
+      "cited_documents": [
+        "05_客户项目交付与变更管理流程手册.docx"
+      ],
+      "matched_documents": [
+        "05_客户项目交付与变更管理流程手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-tech-001",
+      "category": "technical",
+      "difficulty": "medium",
+      "question": "开放平台访问令牌有效多久，建议提前多久刷新？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 8566.43,
+      "timings": {
+        "hybrid_retrieval_ms": 736.26,
+        "rerank_ms": 935.81,
+        "search_total_ms": 1672.41,
+        "context_build_ms": 0.05,
+        "generation_ms": 6888.7,
+        "validation_ms": 0.21,
+        "render_ms": 0.03,
+        "total_ms": 8561.42
+      },
+      "answer": "开放平台访问令牌默认有效期为3600秒。[资料1]\n建议在令牌到期前5分钟刷新，并缓存复用。[资料1]",
+      "reference_answer": "访问令牌默认有效期为3600秒，客户端应在到期前5分钟刷新并缓存复用。",
+      "refusal_reason": null,
+      "required_facts": [
+        "3600秒",
+        "到期前5分钟"
+      ],
+      "matched_facts": [
+        "3600秒",
+        "到期前5分钟"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "cited_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "matched_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-tech-002",
+      "category": "technical",
+      "difficulty": "hard",
+      "question": "Webhook如何验签、去重以及限制响应时间？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 13857.71,
+      "timings": {
+        "hybrid_retrieval_ms": 171.32,
+        "rerank_ms": 818.71,
+        "search_total_ms": 990.35,
+        "context_build_ms": 0.06,
+        "generation_ms": 12844.12,
+        "validation_ms": 0.54,
+        "render_ms": 0.03,
+        "total_ms": 13835.13
+      },
+      "answer": "Webhook验签使用HMAC-SHA256，接收方应使用原始请求体、时间戳和Webhook密钥验证X-QM-Signature。[资料1]\n接收方应拒绝时间戳与本地时间相差超过5分钟的请求。[资料1]\n接收方必须根据event_id去重。[资料1]\n接收方必须在5秒内返回响应；耗时业务应进入异步队列。[资料1]",
+      "reference_answer": "接收方应使用原始请求体、时间戳和Webhook密钥验证X-QM-Signature，按event_id去重，并在5秒内返回响应。",
+      "refusal_reason": null,
+      "required_facts": [
+        "原始请求体",
+        "时间戳",
+        "Webhook密钥",
+        "X-QM-Signature",
+        "event_id去重",
+        "5秒内"
+      ],
+      "matched_facts": [
+        "原始请求体",
+        "时间戳",
+        "Webhook密钥",
+        "X-QM-Signature",
+        "event_id去重",
+        "5秒内"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "cited_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "matched_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-tech-003",
+      "category": "technical",
+      "difficulty": "medium",
+      "question": "P1生产故障的首次响应目标和更新频率是什么？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 8754.81,
+      "timings": {
+        "hybrid_retrieval_ms": 173.9,
+        "rerank_ms": 831.89,
+        "search_total_ms": 1006.13,
+        "context_build_ms": 0.08,
+        "generation_ms": 7730.89,
+        "validation_ms": 0.34,
+        "render_ms": 0.05,
+        "total_ms": 8737.52
+      },
+      "answer": "P1生产故障的首次响应目标为15分钟，更新频率为每30分钟一次。[资料2]",
+      "reference_answer": "P1生产故障的首次响应目标为15分钟，状态每30分钟更新一次。",
+      "refusal_reason": null,
+      "required_facts": [
+        "15分钟",
+        "每30分钟"
+      ],
+      "matched_facts": [
+        "15分钟",
+        "每30分钟"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "cited_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "matched_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-leg-001",
+      "category": "contract",
+      "difficulty": "hard",
+      "question": "合同约定的生产服务月度可用性是多少，计划维护满足什么条件不计入不可用？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 10364.72,
+      "timings": {
+        "hybrid_retrieval_ms": 185.01,
+        "rerank_ms": 808.35,
+        "search_total_ms": 993.69,
+        "context_build_ms": 0.07,
+        "generation_ms": 9353.44,
+        "validation_ms": 0.25,
+        "render_ms": 0.03,
+        "total_ms": 10347.51
+      },
+      "answer": "合同约定的生产服务月度可用性不低于99.9%。[资料1]\n计划维护在至少48小时前通知且每月累计不超过4小时的，不计入不可用时间。[资料1]",
+      "reference_answer": "生产服务月度可用性应不低于99.9%。计划维护需至少提前48小时通知且每月累计不超过4小时，满足这两个条件时不计入不可用时间。",
+      "refusal_reason": null,
+      "required_facts": [
+        "不低于99.9%",
+        "48小时",
+        "通知",
+        "每月累计不超过4小时"
+      ],
+      "matched_facts": [
+        "不低于99.9%",
+        "48小时",
+        "通知",
+        "每月累计不超过4小时"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "07_云服务订阅与数据处理合同示范文本.docx"
+      ],
+      "cited_documents": [
+        "07_云服务订阅与数据处理合同示范文本.docx"
+      ],
+      "matched_documents": [
+        "07_云服务订阅与数据处理合同示范文本.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-leg-002",
+      "category": "contract",
+      "difficulty": "hard",
+      "question": "月度可用性为99.2%时可以申请多少服务费抵扣，申请期限是什么？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 12968.38,
+      "timings": {
+        "hybrid_retrieval_ms": 183.63,
+        "rerank_ms": 821.18,
+        "search_total_ms": 1005.1,
+        "context_build_ms": 0.06,
+        "generation_ms": 11957.29,
+        "validation_ms": 0.28,
+        "render_ms": 0.03,
+        "total_ms": 12962.79
+      },
+      "answer": "月度可用性为99.2%时，属于低于99.5%但不低于99.0%的区间，可申请当月服务费10%的服务抵扣。[资料1]\n该服务抵扣的申请期限为次月10个工作日内。[资料1]",
+      "reference_answer": "月度可用性为99.2%时，适用低于99.5%但不低于99.0%的区间，可申请当月服务费10%的抵扣，并应在次月10个工作日内提出申请。",
+      "refusal_reason": null,
+      "required_facts": [
+        "当月服务费10%",
+        "次月10个工作日内"
+      ],
+      "matched_facts": [
+        "当月服务费10%",
+        "次月10个工作日内"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "07_云服务订阅与数据处理合同示范文本.docx"
+      ],
+      "cited_documents": [
+        "07_云服务订阅与数据处理合同示范文本.docx"
+      ],
+      "matched_documents": [
+        "07_云服务订阅与数据处理合同示范文本.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-leg-003",
+      "category": "contract",
+      "difficulty": "medium",
+      "question": "云服务订阅终止后客户有多久导出数据，乙方多久完成可操作系统中的删除？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 11375.65,
+      "timings": {
+        "hybrid_retrieval_ms": 178.94,
+        "rerank_ms": 904.91,
+        "search_total_ms": 1084.16,
+        "context_build_ms": 0.06,
+        "generation_ms": 10286.28,
+        "validation_ms": 0.23,
+        "render_ms": 0.03,
+        "total_ms": 11370.79
+      },
+      "answer": "云服务订阅终止后，客户有30日导出数据。[资料1]\n乙方在导出期限届满后启动删除，并在90日内从可操作系统中完成删除。[资料1]",
+      "reference_answer": "订阅终止后，客户有30日导出数据；乙方应在90日内从可操作系统中完成删除。",
+      "refusal_reason": null,
+      "required_facts": [
+        "30日导出",
+        "90日内",
+        "完成删除"
+      ],
+      "matched_facts": [
+        "30日导出",
+        "90日内",
+        "完成删除"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "07_云服务订阅与数据处理合同示范文本.docx"
+      ],
+      "cited_documents": [
+        "07_云服务订阅与数据处理合同示范文本.docx"
+      ],
+      "matched_documents": [
+        "07_云服务订阅与数据处理合同示范文本.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-faq-001",
+      "category": "faq",
+      "difficulty": "medium",
+      "question": "FAQ中说试用期员工在什么条件下可以申请年休假？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 15053.53,
+      "timings": {
+        "hybrid_retrieval_ms": 221.07,
+        "rerank_ms": 1200.28,
+        "search_total_ms": 1421.64,
+        "context_build_ms": 0.07,
+        "generation_ms": 13605.36,
+        "validation_ms": 0.23,
+        "render_ms": 0.03,
+        "total_ms": 15027.35
+      },
+      "answer": "FAQ中说明：试用期员工如果累计工作已满1年，可以申请当年度按在岗月数折算的年休假。[资料1]\nFAQ中还说明：试用期员工在试用期内连续休假超过2个工作日的，还需部门负责人批准。[资料1]",
+      "reference_answer": "试用期员工累计工作满1年时，可以申请当年度按在岗月数折算的年休假。",
+      "refusal_reason": null,
+      "required_facts": [
+        "满1年",
+        "按在岗月数折算"
+      ],
+      "matched_facts": [
+        "满1年",
+        "按在岗月数折算"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "cited_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "matched_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-faq-002",
+      "category": "faq",
+      "difficulty": "medium",
+      "question": "按照FAQ，接口返回429后应该采取什么措施？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 13116.23,
+      "timings": {
+        "hybrid_retrieval_ms": 193.39,
+        "rerank_ms": 854.66,
+        "search_total_ms": 1048.34,
+        "context_build_ms": 0.06,
+        "generation_ms": 12062.49,
+        "validation_ms": 0.18,
+        "render_ms": 0.03,
+        "total_ms": 13111.13
+      },
+      "answer": "按照FAQ，接口返回429后应读取Retry-After并等待，采用指数退避。[资料1]\n按照FAQ，接口返回429后不要创建多个应用规避限流，也不要立即高频重试。[资料1]",
+      "reference_answer": "应读取Retry-After后等待，并采用指数退避；不要创建多个应用规避限流，也不要立即高频重试。",
+      "refusal_reason": null,
+      "required_facts": [
+        "读取Retry-After",
+        "指数退避",
+        "不要创建多个应用规避限流",
+        "不要立即高频重试"
+      ],
+      "matched_facts": [
+        "读取Retry-After",
+        "指数退避",
+        "不要创建多个应用规避限流",
+        "不要立即高频重试"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "cited_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "matched_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-faq-003",
+      "category": "faq",
+      "difficulty": "medium",
+      "question": "FAQ如何说明合同终止后的数据导出和删除时间？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 14589.38,
+      "timings": {
+        "hybrid_retrieval_ms": 184.23,
+        "rerank_ms": 824.81,
+        "search_total_ms": 1009.37,
+        "context_build_ms": 0.08,
+        "generation_ms": 13555.4,
+        "validation_ms": 0.15,
+        "render_ms": 0.02,
+        "total_ms": 14565.05
+      },
+      "answer": "FAQ说明客户通常有30日导出窗口，窗口结束后启动删除，并在90日内从可操作系统完成删除；备份数据在正常轮换周期内清除。具体以订单和合同为准。[资料1]",
+      "reference_answer": "合同终止后，客户通常有30日的数据导出窗口；窗口结束后启动删除，并在90日内从可操作系统完成删除。",
+      "refusal_reason": null,
+      "required_facts": [
+        "30日",
+        "导出窗口",
+        "90日内",
+        "完成删除"
+      ],
+      "matched_facts": [
+        "30日",
+        "导出窗口",
+        "90日内",
+        "完成删除"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "cited_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "matched_documents": [
+        "08_员工与客户服务FAQ.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-dev-na-001",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "公司为员工年度体检提供多少元报销额度？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 7447.49,
+      "timings": {
+        "hybrid_retrieval_ms": 206.14,
+        "rerank_ms": 823.84,
+        "search_total_ms": 1030.28,
+        "context_build_ms": 0.06,
+        "generation_ms": 6397.69,
+        "validation_ms": 0.03,
+        "render_ms": 0.01,
+        "total_ms": 7428.11
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的资料中未包含员工年度体检报销额度的相关信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-dev-na-002",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "员工每月可以报销多少元的上下班通勤费用？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 8415.33,
+      "timings": {
+        "hybrid_retrieval_ms": 309.72,
+        "rerank_ms": 832.37,
+        "search_total_ms": 1142.37,
+        "context_build_ms": 0.06,
+        "generation_ms": 7268.08,
+        "validation_ms": 0.05,
+        "render_ms": 0.01,
+        "total_ms": 8410.6
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的资料未说明员工每月上下班通勤费用报销额度或相关标准。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-dev-na-003",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "公司要求客户数据必须使用哪一种具体加密算法？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 7485.21,
+      "timings": {
+        "hybrid_retrieval_ms": 180.22,
+        "rerank_ms": 876.16,
+        "search_total_ms": 1056.71,
+        "context_build_ms": 0.07,
+        "generation_ms": 6410.11,
+        "validation_ms": 0.04,
+        "render_ms": 0.01,
+        "total_ms": 7466.97
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "知识库资料只提到客户数据或机密/严格机密数据需要传输与存储加密、必须使用公司批准的加密通道，但未说明公司要求客户数据必须使用哪一种具体加密算法。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-dev-na-004",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "关键供应商当前的银行账户和收款联系人是什么？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 8789.9,
+      "timings": {
+        "hybrid_retrieval_ms": 180.43,
+        "rerank_ms": 795.62,
+        "search_total_ms": 976.37,
+        "context_build_ms": 0.07,
+        "generation_ms": 7796.6,
+        "validation_ms": 0.03,
+        "render_ms": 0.01,
+        "total_ms": 8773.11
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "知识库资料未提供关键供应商当前的银行账户和收款联系人信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-dev-na-005",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "项目交付完成后项目经理可以获得多少绩效奖金？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 6026.53,
+      "timings": {
+        "hybrid_retrieval_ms": 181.87,
+        "rerank_ms": 821.6,
+        "search_total_ms": 1003.78,
+        "context_build_ms": 0.05,
+        "generation_ms": 4992.43,
+        "validation_ms": 0.04,
+        "render_ms": 0.03,
+        "total_ms": 5996.35
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的知识库资料中没有关于项目交付完成后项目经理绩效奖金金额、比例或计算方式的信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-dev-na-006",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "开放平台单个请求体允许的最大容量是多少MB？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 7230.43,
+      "timings": {
+        "hybrid_retrieval_ms": 187.04,
+        "rerank_ms": 814.99,
+        "search_total_ms": 1002.35,
+        "context_build_ms": 0.07,
+        "generation_ms": 6223.23,
+        "validation_ms": 0.05,
+        "render_ms": 0.02,
+        "total_ms": 7225.76
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "知识库资料未提供开放平台单个请求体允许的最大容量（MB）信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-dev-na-007",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "云服务合同争议应提交哪一家仲裁机构？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 6940.21,
+      "timings": {
+        "hybrid_retrieval_ms": 167.75,
+        "rerank_ms": 816.28,
+        "search_total_ms": 984.33,
+        "context_build_ms": 0.05,
+        "generation_ms": 5950.6,
+        "validation_ms": 0.04,
+        "render_ms": 0.02,
+        "total_ms": 6935.08
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "知识库资料未载明云服务合同争议应提交的具体仲裁机构；资料仅说明争议解决地和适用法律应在正式签约时由双方根据实际情况填写。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-dev-na-008",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "企业知识库人工客服热线号码是多少？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 4925.45,
+      "timings": {
+        "hybrid_retrieval_ms": 190.0,
+        "rerank_ms": 868.1,
+        "search_total_ms": 1058.41,
+        "context_build_ms": 0.05,
+        "generation_ms": 3850.2,
+        "validation_ms": 0.03,
+        "render_ms": 0.01,
+        "total_ms": 4908.73
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "知识库资料中未提供企业知识库人工客服热线号码。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    }
+  ]
+}

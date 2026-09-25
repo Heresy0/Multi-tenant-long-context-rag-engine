@@ -8,7 +8,9 @@
 evals/
 ├── datasets/
 │   ├── retrieval_dev.jsonl
-│   └── retrieval_test.jsonl
+│   ├── retrieval_test.jsonl
+│   ├── answer_dev.jsonl
+│   └── answer_test.jsonl
 ├── reports/
 │   ├── retrieval_baseline.json
 │   ├── retrieval_hybrid_v1.json
@@ -31,6 +33,68 @@ evals/
 ## 独立测试集
 
 `retrieval_test.jsonl` 包含 32 条未参与检索参数调整的问题，其中 24 条可回答、8 条无答案。可回答问题覆盖 8 份企业文档，并与开发集没有重复问题；无答案问题包含远程办公天数、密码长度、API 超时和合同管辖地等语义相关但语料未明确给出的信息。
+
+## 答案级评估集
+
+`answer_dev.jsonl` 和 `answer_test.jsonl` 各包含 32 条问题，其中均为 24 条可回答、8 条无答案。可回答问题在 HR、财务、安全、采购、项目、技术、合同和 FAQ 八个类别中各 3 条。两个集合的问题、样本 ID 完全隔离。
+
+- `answer_dev.jsonl`：用于开发答案提示词、引用策略和自动评分规则。
+- `answer_test.jsonl`：作为独立测试集，不应用于调整提示词或评分阈值。
+
+每条样本包含：
+
+- `reference_answer`：人工编写的参考答案，不要求模型逐字一致。
+- `required_facts`：答案必须覆盖的最小事实短语，用于事实覆盖率评估。
+- `expected_evidence`：正确来源文件及原文证据，用于引用来源和证据准确率评估。
+- `answerable`：知识库是否足以回答，用于计算回答接受率和无答案拒绝率。
+- `category`、`difficulty`：用于按业务类别和难度分组分析。
+
+答案评估不应只计算字符串完全匹配。建议至少报告：回答判断准确率、关键事实覆盖率、引用来源准确率、无答案拒绝率、错误接受率和端到端延迟。
+
+### 运行答案评估
+
+先启动 FastAPI 服务，再从项目根目录运行开发集：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_answers.py `
+  --dataset evals\datasets\answer_dev.jsonl `
+  --endpoint http://127.0.0.1:8000/api/qa `
+  --timeout 120 `
+  --output evals\reports\answer_dev_v1.json
+```
+
+首次运行可以只执行前 3 条进行冒烟测试：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_answers.py `
+  --dataset evals\datasets\answer_dev.jsonl `
+  --limit 3
+```
+
+开发策略和评分规则稳定后，才能运行独立测试集：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_answers.py `
+  --dataset evals\datasets\answer_test.jsonl `
+  --output evals\reports\answer_test_v1.json
+```
+
+答案报告包括：
+
+- `answerability_accuracy`：可回答与不可回答判断的整体准确率。
+- `answerable_accept_rate`：可回答问题被系统接受回答的比例。
+- `unanswerable_rejection_rate`：无答案问题被正确拒答的比例。
+- `required_fact_coverage`：参考关键事实被答案覆盖的微平均比例。
+- `fact_complete_rate`：关键事实全部覆盖的可回答问题比例。
+- `citation_source_precision`：返回的引用来源中正确来源的比例。
+- `citation_source_recall`：期望引用来源中实际被引用的比例。
+- `citation_case_hit_rate`：至少命中一个正确来源的可回答问题比例。
+- `mean/p50/p95_latency_ms`：包含检索、重排序、生成和校验的端到端延迟。
+- `stage_latency`：服务端各阶段的样本数、平均耗时、P50 和 P95，包含混合检索、重排序、检索总耗时、上下文构建、模型生成、结果校验、答案渲染和服务端总耗时。
+
+其中，顶层 `latency_ms` 是评估客户端观察到的完整 HTTP 请求耗时；`stage_latency.total_ms` 是服务端 `AnswerService` 内部耗时。两者的差值主要包含 HTTP 传输、FastAPI 请求解析和响应序列化等开销。没有执行的阶段使用 `null`，例如检索不到资料时不会产生模型生成和校验耗时。
+
+关键事实覆盖使用 NFKC 归一化后的短语匹配，适合作为可重复的自动基线，但不等同于语义正确性或忠实度。复杂改写和跨句推理仍需人工抽检或单独的评审模型。
 
 ## 运行方式
 

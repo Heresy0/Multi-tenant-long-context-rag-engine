@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from .api.chat import router as chat_router
 from .chat_history import ChatHistoryRepository
 from .retrieval_service import RetrievalService
+from .answer_service import AnswerService
+from .api.qa import router as qa_router
 
 
 @asynccontextmanager
@@ -23,6 +25,13 @@ async def lifespan(app: FastAPI):
         retrieval_service = RetrievalService(
             settings=settings
         )
+
+        answer_service = AnswerService(
+            settings=settings,
+            retrieval_service=retrieval_service,
+        )
+
+        app.state.answer_service = answer_service
 
         app.state.retrieval_service = retrieval_service
 
@@ -49,6 +58,7 @@ app = FastAPI(
     )
 
 app.include_router(chat_router)
+app.include_router(qa_router)
 
 @app.get("/health",tags=["系统"])
 def health_check():
