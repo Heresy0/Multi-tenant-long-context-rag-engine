@@ -17,6 +17,8 @@ def required_env(name: str) -> str:
 
 class Settings:
     def __init__(self):
+        self.database_url = required_env("DATABASE_URL")
+
         self.chat_model = required_env("DASHSCOPE_MODEL")
         self.chat_base_url = required_env("DASHSCOPE_BASE_URL")
         self.chat_api_key = required_env("DASHSCOPE_API_KEY")
