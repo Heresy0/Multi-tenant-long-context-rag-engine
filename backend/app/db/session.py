@@ -1,4 +1,4 @@
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 
@@ -21,3 +21,11 @@ def create_session_factory(
         class_=Session,
         expire_on_commit=False,
     )
+
+
+def verify_database_connection(
+    engine: Engine,
+) -> None:
+    """确认应用启动时数据库可连接。"""
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))

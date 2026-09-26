@@ -8,11 +8,16 @@ from .chat_history import ChatHistoryRepository
 from .retrieval_service import RetrievalService
 from .answer_service import AnswerService
 from .api.qa import router as qa_router
+from .db.session import (
+    create_database_engine,
+    create_session_factory,
+    verify_database_connection,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用启动时创建agent,关闭时释放SQLite连接。"""
+    """初始化应用服务，并在关闭时释放数据库连接。"""
     database_path = (PROJECT_ROOT / "agent_memory.sqlite")
     database_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -21,6 +26,20 @@ async def lifespan(app: FastAPI):
         checkpointer.setup()
 
         settings = Settings()
+
+        database_engine = create_database_engine(
+            settings.database_url
+        )
+
+        #即使后续初始化失败，也释放连接池
+        stack.callback(database_engine.dispose)
+
+        verify_database_connection(database_engine)
+
+        app.state.database_engine = database_engine
+        app.state.database_session_factory = (
+            create_session_factory(database_engine)
+        )
 
         retrieval_service = RetrievalService(
             settings=settings
