@@ -23,3 +23,4 @@ def get_database_session(
 
     finally:
         session.close()
+

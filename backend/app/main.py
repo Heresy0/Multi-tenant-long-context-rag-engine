@@ -13,6 +13,9 @@ from .db.session import (
     create_session_factory,
     verify_database_connection,
 )
+from .api.knowledge_bases import (
+    router as knowledge_base_router,
+)
 
 
 @asynccontextmanager
@@ -78,6 +81,7 @@ app = FastAPI(
 
 app.include_router(chat_router)
 app.include_router(qa_router)
+app.include_router(knowledge_base_router)
 
 @app.get("/health",tags=["系统"])
 def health_check():
