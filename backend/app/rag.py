@@ -20,6 +20,7 @@ from .document_splitter import split_docx
 from .hybrid_retriever import create_hybrid_retriever
 from .reranker import QwenReranker
 from .rerank_retriever import RerankRetriever
+from .db.models import EMBEDDING_DIMENSION
 
 
 COLLECTION_NAME = "enterprise_knowledge"
@@ -44,6 +45,7 @@ def create_embeddings(settings: Settings) -> OpenAIEmbeddings:
         model=settings.embedding_model,
         openai_api_key=settings.chat_api_key,
         base_url=settings.chat_base_url,
+        dimensions=EMBEDDING_DIMENSION,
         check_embedding_ctx_length=False,
         chunk_size=10,
     )

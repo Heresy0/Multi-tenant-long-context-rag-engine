@@ -1,6 +1,8 @@
 from langchain_core.documents import Document
 
 from backend.app import rag
+from backend.app.config import Settings
+from backend.app.db.models import EMBEDDING_DIMENSION
 
 
 class FakeVectorStore:
@@ -94,3 +96,14 @@ def test_same_file_is_not_indexed_twice(
     assert first_count == 1
     assert second_count == 0
     assert len(vector_store.documents) == 1
+
+def test_embedding_client_uses_database_dimension() -> None:
+    settings = object.__new__(Settings)
+    settings.embedding_model = "text-embedding-v4"
+    settings.chat_api_key = "test-api-key"
+    settings.chat_base_url = "http://localhost/v1"
+
+    embeddings = rag.create_embeddings(settings)
+
+    assert embeddings.dimensions == EMBEDDING_DIMENSION
+    assert embeddings.dimensions == 1024
