@@ -28,6 +28,15 @@ class BootstrapResult:
     department_knowledge_base_id: UUID
 
 
+@dataclass(frozen=True, slots=True)
+class DepartmentManagerProvisionResult:
+    tenant_id: UUID
+    user_id: UUID
+    department_id: UUID
+    company_knowledge_base_id: UUID
+    department_knowledge_base_id: UUID
+
+
 def bootstrap_initial_tenant(
     session: Session,
     *,
@@ -159,6 +168,142 @@ def bootstrap_initial_tenant(
         raise
 
     return BootstrapResult(
+        tenant_id=tenant.id,
+        user_id=user.id,
+        department_id=department.id,
+        company_knowledge_base_id=company_knowledge_base.id,
+        department_knowledge_base_id=(
+            department_knowledge_base.id
+        ),
+    )
+
+
+def provision_department_manager(
+    session: Session,
+    *,
+    tenant_name: str,
+    department_name: str,
+    external_subject: str,
+    user_name: str,
+    user_email: str | None = None,
+    company_knowledge_base_name: str = "公司公共知识库",
+    department_knowledge_base_name: str | None = None,
+) -> DepartmentManagerProvisionResult:
+    """幂等开通已有企业的部门负责人及部门知识库。"""
+    values = {
+        "企业名称": tenant_name,
+        "部门名称": department_name,
+        "Keycloak sub": external_subject,
+        "用户名称": user_name,
+        "公共知识库名称": company_knowledge_base_name,
+    }
+
+    for label, value in values.items():
+        if not value.strip():
+            raise ValueError(f"{label}不能为空。")
+
+    tenant_name = tenant_name.strip()
+    department_name = department_name.strip()
+    external_subject = external_subject.strip()
+    user_name = user_name.strip()
+    user_email = user_email.strip() if user_email else None
+    company_knowledge_base_name = (
+        company_knowledge_base_name.strip()
+    )
+    department_knowledge_base_name = (
+        department_knowledge_base_name.strip()
+        if department_knowledge_base_name
+        else f"{department_name}知识库"
+    )
+
+    try:
+        tenant = _get_single_tenant_by_name(
+            session,
+            tenant_name,
+        )
+
+        if tenant is None:
+            raise BootstrapConflictError(
+                f"企业不存在：{tenant_name}。"
+            )
+
+        user = _get_single_user_by_subject(
+            session,
+            external_subject,
+        )
+
+        if user is not None and user.tenant_id != tenant.id:
+            raise BootstrapConflictError(
+                "该 Keycloak sub 已绑定到其他租户。"
+            )
+
+        if user is None:
+            user = User(
+                tenant_id=tenant.id,
+                external_subject=external_subject,
+                name=user_name,
+                email=user_email,
+            )
+            session.add(user)
+            session.flush()
+
+        department = session.scalar(
+            select(Department).where(
+                Department.tenant_id == tenant.id,
+                Department.name == department_name,
+            )
+        )
+
+        if department is None:
+            department = Department(
+                tenant_id=tenant.id,
+                name=department_name,
+            )
+            session.add(department)
+            session.flush()
+
+        company_knowledge_base = _get_or_create_knowledge_base(
+            session,
+            tenant_id=tenant.id,
+            name=company_knowledge_base_name,
+            visibility="company",
+        )
+        department_knowledge_base = _get_or_create_knowledge_base(
+            session,
+            tenant_id=tenant.id,
+            name=department_knowledge_base_name,
+            visibility="restricted",
+        )
+
+        _ensure_membership(
+            session,
+            tenant_id=tenant.id,
+            department_id=department.id,
+            user_id=user.id,
+            role="manager",
+        )
+        _ensure_department_grant(
+            session,
+            tenant_id=tenant.id,
+            knowledge_base_id=department_knowledge_base.id,
+            department_id=department.id,
+            permission="viewer",
+        )
+        _ensure_user_grant(
+            session,
+            tenant_id=tenant.id,
+            knowledge_base_id=department_knowledge_base.id,
+            user_id=user.id,
+            permission="admin",
+        )
+
+        session.commit()
+
+    except Exception:
+        session.rollback()
+        raise
+
+    return DepartmentManagerProvisionResult(
         tenant_id=tenant.id,
         user_id=user.id,
         department_id=department.id,

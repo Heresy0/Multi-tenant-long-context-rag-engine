@@ -9,6 +9,7 @@ from backend.app.db.base import Base
 from backend.app.db.bootstrap import (
     BootstrapConflictError,
     bootstrap_initial_tenant,
+    provision_department_manager,
 )
 from backend.app.db.models import (
     Department,
@@ -121,3 +122,85 @@ def test_rejects_subject_bound_to_another_tenant(
         )
 
     assert count(session, Tenant) == 1
+
+
+def test_provisions_department_manager_with_isolation(
+    session: Session,
+) -> None:
+    alice = bootstrap(session)
+
+    bob = provision_department_manager(
+        session,
+        tenant_name="示例企业",
+        department_name="人力资源部",
+        external_subject="keycloak-bob",
+        user_name="Bob",
+        user_email="bob@example.local",
+    )
+
+    assert bob.tenant_id == alice.tenant_id
+    assert count(session, Tenant) == 1
+    assert count(session, User) == 2
+    assert count(session, Department) == 2
+    assert count(session, KnowledgeBase) == 3
+
+    authorization = AuthorizationService(session)
+    alice_principal = Principal(
+        user_id=alice.user_id,
+        tenant_id=alice.tenant_id,
+        external_subject="keycloak-alice",
+    )
+    bob_principal = Principal(
+        user_id=bob.user_id,
+        tenant_id=bob.tenant_id,
+        external_subject="keycloak-bob",
+    )
+
+    assert authorization.get_permission(
+        principal=alice_principal,
+        knowledge_base_id=(
+            bob.department_knowledge_base_id
+        ),
+    ) is None
+    assert authorization.get_permission(
+        principal=bob_principal,
+        knowledge_base_id=(
+            alice.department_knowledge_base_id
+        ),
+    ) is None
+    assert authorization.get_permission(
+        principal=bob_principal,
+        knowledge_base_id=bob.company_knowledge_base_id,
+    ) == "viewer"
+    assert authorization.get_permission(
+        principal=bob_principal,
+        knowledge_base_id=(
+            bob.department_knowledge_base_id
+        ),
+    ) == "admin"
+
+
+def test_department_manager_provision_is_idempotent(
+    session: Session,
+) -> None:
+    bootstrap(session)
+    arguments = {
+        "tenant_name": "示例企业",
+        "department_name": "人力资源部",
+        "external_subject": "keycloak-bob",
+        "user_name": "Bob",
+    }
+
+    first = provision_department_manager(
+        session,
+        **arguments,
+    )
+    second = provision_department_manager(
+        session,
+        **arguments,
+    )
+
+    assert second == first
+    assert count(session, User) == 2
+    assert count(session, Department) == 2
+    assert count(session, KnowledgeBase) == 3
