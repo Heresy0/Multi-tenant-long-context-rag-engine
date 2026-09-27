@@ -16,6 +16,7 @@ from .db.session import (
 from .api.knowledge_bases import (
     router as knowledge_base_router,
 )
+from .security.oidc import OidcTokenVerifier
 
 
 @asynccontextmanager
@@ -29,6 +30,12 @@ async def lifespan(app: FastAPI):
         checkpointer.setup()
 
         settings = Settings()
+
+        app.state.oidc_token_verifier = OidcTokenVerifier(
+            issuer=settings.oidc_issuer,
+            audience=settings.oidc_audience,
+            jwks_url=settings.oidc_jwks_url,
+        )
 
         database_engine = create_database_engine(
             settings.database_url

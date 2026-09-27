@@ -35,3 +35,6 @@ jieba==0.42.1
 sqlalchemy==2.0.54
 alembic==1.20.0
 psycopg[binary]==3.3.6
+
+# Keycloak OIDC 访问令牌验签
+pyjwt[crypto]==2.14.0

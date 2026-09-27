@@ -19,6 +19,10 @@ class Settings:
     def __init__(self):
         self.database_url = required_env("DATABASE_URL")
 
+        self.oidc_issuer = required_env("OIDC_ISSUER").rstrip("/")
+        self.oidc_audience = required_env("OIDC_AUDIENCE")
+        self.oidc_jwks_url = required_env("OIDC_JWKS_URL")
+
         self.chat_model = required_env("DASHSCOPE_MODEL")
         self.chat_base_url = required_env("DASHSCOPE_BASE_URL")
         self.chat_api_key = required_env("DASHSCOPE_API_KEY")
