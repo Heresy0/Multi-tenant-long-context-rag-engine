@@ -6,13 +6,14 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from backend.app.config import required_env
+from backend.app.config import Settings, required_env
 from backend.app.db.models import (
     EMBEDDING_DIMENSION,
     DocumentChunk,
     KnowledgeBase,
     KnowledgeDocument,
     Tenant,
+    User,
 )
 from backend.app.security.retrieval_scope import (
     RetrievalScope,
@@ -20,6 +21,10 @@ from backend.app.security.retrieval_scope import (
 from backend.app.vector_repository import (
     PgVectorRepository,
 )
+from backend.app.pgvector_indexing_service import (
+    PgVectorIndexingService,
+)
+from langchain_core.embeddings import Embeddings
 
 
 def _identifier() -> str:
@@ -34,6 +39,30 @@ def _embedding(
         [first, second]
         + [0.0] * (EMBEDDING_DIMENSION - 2)
     )
+
+
+class IntegrationEmbeddings(Embeddings):
+    def embed_documents(
+        self,
+        texts: list[str],
+    ) -> list[list[float]]:
+        return [
+            _embedding(1.0, 0.0)
+            for _text in texts
+        ]
+
+    def embed_query(
+        self,
+        text: str,
+    ) -> list[float]:
+        del text
+        return _embedding(1.0, 0.0)
+
+
+def _settings() -> Settings:
+    settings = object.__new__(Settings)
+    settings.embedding_model = "text-embedding-v4"
+    return settings
 
 
 @pytest.fixture
@@ -55,6 +84,7 @@ def postgres_session() -> Iterator[Session]:
     session = Session(
         bind=connection,
         expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
     )
 
     try:
@@ -229,4 +259,101 @@ def test_real_pgvector_search_is_scoped_and_ordered(
     assert hits[1].distance == pytest.approx(
         1.0,
         abs=1e-6,
+    )
+
+@pytest.mark.integration
+def test_index_file_and_search_real_pgvector(
+    postgres_session: Session,
+    tmp_path,
+) -> None:
+    tenant = Tenant(
+        id=uuid4(),
+        name="pgvector写入测试企业",
+    )
+    postgres_session.add(tenant)
+    postgres_session.flush()
+
+    user = User(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        external_subject="pgvector-test-user",
+        name="测试用户",
+    )
+    technology_kb = KnowledgeBase(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        name="pgvector技术知识库",
+        visibility="restricted",
+    )
+    hr_kb = KnowledgeBase(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        name="pgvector人力知识库",
+        visibility="restricted",
+    )
+    postgres_session.add_all([
+        user,
+        technology_kb,
+        hr_kb,
+    ])
+    postgres_session.commit()
+
+    file_path = tmp_path / "真实写入测试.txt"
+    file_path.write_text(
+        "这是一段写入真实pgvector的技术资料。",
+        encoding="utf-8",
+    )
+
+    technology_scope = RetrievalScope(
+        tenant_id=tenant.id,
+        knowledge_base_id=technology_kb.id,
+    )
+    hr_scope = RetrievalScope(
+        tenant_id=tenant.id,
+        knowledge_base_id=hr_kb.id,
+    )
+
+    indexing_service = PgVectorIndexingService(
+        session=postgres_session,
+        settings=_settings(),
+        embeddings=IntegrationEmbeddings(),
+    )
+
+    written_count = indexing_service.index_file(
+        file_path=file_path,
+        scope=technology_scope,
+        created_by_user_id=user.id,
+    )
+
+    assert written_count >= 1
+
+    repository = PgVectorRepository(
+        postgres_session
+    )
+
+    technology_hits = repository.search(
+        scope=technology_scope,
+        query_embedding=_embedding(1.0, 0.0),
+        limit=10,
+    )
+    hr_hits = repository.search(
+        scope=hr_scope,
+        query_embedding=_embedding(1.0, 0.0),
+        limit=10,
+    )
+
+    assert len(technology_hits) == written_count
+    assert hr_hits == []
+
+    assert all(
+        hit.tenant_id == tenant.id
+        for hit in technology_hits
+    )
+    assert all(
+        hit.knowledge_base_id == technology_kb.id
+        for hit in technology_hits
+    )
+    assert all(
+        hit.document_name == "真实写入测试.txt"
+        for hit in technology_hits
     )
