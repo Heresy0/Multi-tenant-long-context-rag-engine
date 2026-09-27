@@ -332,3 +332,37 @@ def test_require_permission_raises_when_denied(
             principal=alice_principal(permission_data),
             knowledge_base_id=permission_data["hr_kb"],
         )
+
+def test_builds_scope_for_authorized_knowledge_base(
+    session: Session,
+    permission_data: dict,
+) -> None:
+    service = AuthorizationService(session)
+    principal = alice_principal(permission_data)
+
+    scope = service.require_retrieval_scope(
+        principal=principal,
+        knowledge_base_id=(
+            permission_data["technology_kb"]
+        ),
+    )
+
+    assert scope.tenant_id == permission_data["tenant_a"]
+    assert (
+        scope.knowledge_base_id
+        == permission_data["technology_kb"]
+    )
+
+
+def test_rejects_scope_for_unauthorized_knowledge_base(
+    session: Session,
+    permission_data: dict,
+) -> None:
+    service = AuthorizationService(session)
+    principal = alice_principal(permission_data)
+
+    with pytest.raises(AuthorizationDenied):
+        service.require_retrieval_scope(
+            principal=principal,
+            knowledge_base_id=permission_data["hr_kb"],
+        )

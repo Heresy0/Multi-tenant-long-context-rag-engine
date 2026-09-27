@@ -13,6 +13,7 @@ from ..db.models import (
     User,
 )
 from .principal import Principal
+from .retrieval_scope import RetrievalScope
 
 
 PERMISSION_LEVELS = {
@@ -116,6 +117,24 @@ class AuthorizationService:
         return max(
             permissions,
             key=PERMISSION_LEVELS.__getitem__,
+        )
+
+    def require_retrieval_scope(
+        self,
+        *,
+        principal: Principal,
+        knowledge_base_id: UUID,
+    ) -> RetrievalScope:
+        """验证知识库读取权限并生成不可变检索范围。"""
+        self.require_permission(
+            principal=principal,
+            knowledge_base_id=knowledge_base_id,
+            required_permission="viewer",
+        )
+
+        return RetrievalScope(
+            tenant_id=principal.tenant_id,
+            knowledge_base_id=knowledge_base_id,
         )
 
     def can_access(
