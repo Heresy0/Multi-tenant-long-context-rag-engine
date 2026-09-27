@@ -11,10 +11,16 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    Integer,
+    JSON,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
+EMBEDDING_DIMENSION = 1024
+
+from pgvector.sqlalchemy import VECTOR
 
 
 class TimestampMixin:
@@ -382,5 +388,237 @@ class KnowledgeBaseUserGrant(
             "ix_kb_user_grants_user",
             "tenant_id",
             "user_id",
+        ),
+    )
+
+
+class KnowledgeDocument(TimestampMixin, Base):
+    """知识库中的原始文档记录。"""
+
+    __tablename__ = "documents"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+
+    knowledge_base_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+    )
+
+    source_id: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+
+    file_name: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    storage_uri: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    mime_type: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    content_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="pending",
+    )
+
+    version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+    )
+
+    last_error: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "knowledge_base_id"],
+            [
+                "knowledge_bases.tenant_id",
+                "knowledge_bases.id",
+            ],
+            name="fk_documents_knowledge_base",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "created_by_user_id"],
+            ["users.tenant_id", "users.id"],
+            name="fk_documents_created_by_user",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "knowledge_base_id",
+            "id",
+            name="uq_documents_tenant_kb_id",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "knowledge_base_id",
+            "source_id",
+            name="uq_documents_tenant_kb_source",
+        ),
+        CheckConstraint(
+            "status IN "
+            "('pending', 'indexing', 'ready', 'failed')",
+            name="ck_documents_status",
+        ),
+        CheckConstraint(
+            "version >= 1",
+            name="ck_documents_version",
+        ),
+        Index(
+            "ix_documents_tenant_kb_status",
+            "tenant_id",
+            "knowledge_base_id",
+            "status",
+        ),
+    )
+
+
+class DocumentChunk(TimestampMixin, Base):
+    """文档切分后用于混合检索的内容块。"""
+
+    __tablename__ = "document_chunks"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+
+    knowledge_base_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+
+    document_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+
+    chunk_index: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    content_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+
+    parent_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    chunking_version: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    embedding_model: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    embedding: Mapped[list[float]] = mapped_column(
+        VECTOR(EMBEDDING_DIMENSION),
+        nullable=False,
+    )
+
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            [
+                "tenant_id",
+                "knowledge_base_id",
+                "document_id",
+            ],
+            [
+                "documents.tenant_id",
+                "documents.knowledge_base_id",
+                "documents.id",
+            ],
+            name="fk_document_chunks_document",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "knowledge_base_id",
+            "document_id",
+            "chunk_index",
+            name="uq_document_chunks_position",
+        ),
+        CheckConstraint(
+            "chunk_index >= 0",
+            name="ck_document_chunks_index",
+        ),
+        Index(
+            "ix_document_chunks_scope_document",
+            "tenant_id",
+            "knowledge_base_id",
+            "document_id",
+        ),
+        Index(
+            "ix_document_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={
+                "m": 16,
+                "ef_construction": 64,
+            },
+            postgresql_ops={
+                "embedding": "vector_cosine_ops",
+            },
         ),
     )
