@@ -53,31 +53,47 @@ evals/
 
 ### 运行答案评估
 
-先启动 FastAPI 服务，再从项目根目录运行开发集：
+先启动 FastAPI 服务，并把当前用户的访问令牌放入环境变量。令牌不会写入报告：
+
+```powershell
+$env:ENTERPRISE_KB_ACCESS_TOKEN = $token
+```
+
+一次评估固定在一个知识库授权范围内。技术部知识库首次运行可以只执行 1 条技术类问题进行冒烟测试：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\evaluate_answers.py `
   --dataset evals\datasets\answer_dev.jsonl `
-  --endpoint http://127.0.0.1:8000/api/qa `
+  --knowledge-base-id "8e4af664-22c1-480e-9393-36ac401da0f5" `
+  --category technical `
+  --limit 1 `
+  --output evals\reports\answer_dev_technical_smoke.json
+```
+
+冒烟测试通过后可以运行该知识库全部技术类开发题：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_answers.py `
+  --dataset evals\datasets\answer_dev.jsonl `
+  --knowledge-base-id "8e4af664-22c1-480e-9393-36ac401da0f5" `
+  --category technical `
   --timeout 120 `
-  --output evals\reports\answer_dev_v1.json
+  --output evals\reports\answer_dev_technical_v1.json
 ```
 
-首次运行可以只执行前 3 条进行冒烟测试：
-
-```powershell
-.\.venv\Scripts\python.exe scripts\evaluate_answers.py `
-  --dataset evals\datasets\answer_dev.jsonl `
-  --limit 3
-```
-
-开发策略和评分规则稳定后，才能运行独立测试集：
+开发策略和评分规则稳定后，再运行相同分类的独立测试集：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\evaluate_answers.py `
   --dataset evals\datasets\answer_test.jsonl `
-  --output evals\reports\answer_test_v1.json
+  --knowledge-base-id "8e4af664-22c1-480e-9393-36ac401da0f5" `
+  --category technical `
+  --output evals\reports\answer_test_technical_v1.json
+
+Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 ```
+
+`--category` 可以重复使用，但所有选中题目都必须属于本次指定知识库能够访问的语料。当前 Keycloak 访问令牌有效期较短，长评估应按知识库和分类分批执行并在每批开始前更新令牌。
 
 答案报告包括：
 
@@ -96,29 +112,9 @@ evals/
 
 关键事实覆盖使用 NFKC 归一化后的短语匹配，适合作为可重复的自动基线，但不等同于语义正确性或忠实度。复杂改写和跨句推理仍需人工抽检或单独的评审模型。
 
-## 运行方式
+## 历史检索实验
 
-在项目根目录执行：
-
-```powershell
-.\.venv\Scripts\python.exe scripts\inspect_retrieval.py `
-  --dataset evals\datasets\retrieval_dev.jsonl `
-  --k 8 `
-  --fetch-k 20 `
-  --answerability-threshold 0.70 `
-  --output evals\reports\retrieval_rerank_v2.json
-```
-
-独立测试集：
-
-```powershell
-.\.venv\Scripts\python.exe scripts\inspect_retrieval.py `
-  --dataset evals\datasets\retrieval_test.jsonl `
-  --k 8 `
-  --fetch-k 30 `
-  --answerability-threshold 0.70 `
-  --output evals\reports\retrieval_test_rerank_fetch30_v1.json
-```
+以下检索报告来自切换 pgvector 之前的 Chroma 基线实验，仅用于保存算法演进记录。旧的 `scripts/inspect_retrieval.py` 已随 Chroma 正式链路删除，不能再用这些命令运行当前系统。当前 pgvector 链路应通过受保护的 `/api/qa` 和上述答案评估脚本进行测量。
 
 主要指标：
 

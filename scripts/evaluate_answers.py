@@ -1,11 +1,14 @@
 import argparse
 import json
 import math
+import os
 import sys
 import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote
+from uuid import UUID
 
 import requests
 
@@ -24,6 +27,7 @@ TIMING_FIELDS = (
     "render_ms",
     "total_ms",
 )
+ACCESS_TOKEN_ENV = "ENTERPRISE_KB_ACCESS_TOKEN"
 
 
 def normalize(text: str) -> str:
@@ -34,8 +38,32 @@ def normalize(text: str) -> str:
 
 
 def source_name(source: str) -> str:
-    """同时兼容 Windows 和 Linux 路径。"""
-    return source.replace("\\", "/").rsplit("/", 1)[-1]
+    """兼容 Windows 路径和百分号编码的 file URI。"""
+    normalized = unquote(source).replace("\\", "/")
+    return normalized.rsplit("/", 1)[-1]
+
+
+def load_access_token(
+    environment: dict[str, str] | None = None,
+) -> str:
+    """从环境变量读取 JWT，避免出现在命令历史中。"""
+    values = environment if environment is not None else os.environ
+    token = values.get(ACCESS_TOKEN_ENV, "").strip()
+
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+
+    if not token:
+        raise ValueError(
+            f"缺少环境变量：{ACCESS_TOKEN_ENV}"
+        )
+
+    if len(token.split(".")) != 3:
+        raise ValueError(
+            f"{ACCESS_TOKEN_ENV} 不是有效的 JWT"
+        )
+
+    return token
 
 
 def load_dataset(path: Path) -> list[dict]:
@@ -124,6 +152,38 @@ def load_dataset(path: Path) -> list[dict]:
     return cases
 
 
+def filter_cases(
+    cases: list[dict],
+    categories: list[str] | None,
+) -> list[dict]:
+    """按知识库对应的业务分类筛选评估题。"""
+    if not categories:
+        return cases
+
+    selected_categories = {
+        category.strip()
+        for category in categories
+        if category.strip()
+    }
+
+    if not selected_categories:
+        raise ValueError("category 不能为空")
+
+    selected = [
+        case
+        for case in cases
+        if case.get("category") in selected_categories
+    ]
+
+    if not selected:
+        raise ValueError(
+            "题集中没有匹配的 category："
+            + ", ".join(sorted(selected_categories))
+        )
+
+    return selected
+
+
 def validate_response(data) -> dict:
     if not isinstance(data, dict):
         raise ValueError("接口响应必须是 JSON 对象")
@@ -181,6 +241,8 @@ def evaluate_case(
     endpoint: str,
     case: dict,
     *,
+    knowledge_base_id: UUID,
+    access_token: str,
     timeout_seconds: float,
     post=requests.post,
 ) -> dict:
@@ -189,7 +251,17 @@ def evaluate_case(
     try:
         response = post(
             endpoint,
-            json={"question": case["question"]},
+            headers={
+                "Authorization": (
+                    f"Bearer {access_token}"
+                ),
+            },
+            json={
+                "knowledge_base_id": str(
+                    knowledge_base_id
+                ),
+                "question": case["question"],
+            },
             timeout=timeout_seconds,
         )
         response.raise_for_status()
@@ -513,6 +585,12 @@ def main() -> int:
         help="知识库问答接口地址",
     )
     parser.add_argument(
+        "--knowledge-base-id",
+        type=UUID,
+        required=True,
+        help="本次评估使用的知识库 UUID",
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=120.0,
@@ -522,6 +600,14 @@ def main() -> int:
         "--limit",
         type=int,
         help="只运行前 N 条，用于冒烟测试",
+    )
+    parser.add_argument(
+        "--category",
+        action="append",
+        help=(
+            "只评估指定业务分类；可重复使用，"
+            "例如 --category technical"
+        ),
     )
     parser.add_argument(
         "--delay-ms",
@@ -543,7 +629,21 @@ def main() -> int:
     if args.delay_ms < 0:
         parser.error("delay-ms 不能小于 0")
 
+    try:
+        access_token = load_access_token()
+    except ValueError as exc:
+        parser.error(str(exc))
+
     cases = load_dataset(args.dataset)
+
+    try:
+        cases = filter_cases(
+            cases,
+            args.category,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+
     if args.limit is not None:
         cases = cases[: args.limit]
 
@@ -559,6 +659,10 @@ def main() -> int:
             evaluate_case(
                 args.endpoint,
                 case,
+                knowledge_base_id=(
+                    args.knowledge_base_id
+                ),
+                access_token=access_token,
                 timeout_seconds=args.timeout,
             )
         )
@@ -571,8 +675,13 @@ def main() -> int:
         "config": {
             "dataset": str(args.dataset),
             "endpoint": args.endpoint,
+            "knowledge_base_id": str(
+                args.knowledge_base_id
+            ),
+            "authentication": "bearer",
             "timeout_seconds": args.timeout,
             "limit": args.limit,
+            "categories": args.category,
             "delay_ms": args.delay_ms,
         },
         "summary": summarize(results),
