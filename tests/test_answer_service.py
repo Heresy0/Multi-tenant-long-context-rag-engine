@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from uuid import uuid4
 
 from langchain_core.documents import Document
 from langchain_core.messages import (
@@ -17,6 +18,16 @@ from backend.app.answer_service import (
     AnswerService,
 )
 from backend.app.prompts import ANSWER_SYSTEM_PROMPT
+from backend.app.security.retrieval_scope import (
+    RetrievalScope,
+)
+
+
+TEST_SCOPE = RetrievalScope(
+    tenant_id=uuid4(),
+    knowledge_base_id=uuid4(),
+)
+TEST_SESSION = object()
 
 
 class FakeRetrievalService:
@@ -25,10 +36,20 @@ class FakeRetrievalService:
         documents: list[Document],
     ) -> None:
         self.documents = documents
-        self.queries: list[str] = []
+        self.calls: list[dict] = []
 
-    def search(self, query: str) -> list[Document]:
-        self.queries.append(query)
+    def search(
+        self,
+        query: str,
+        *,
+        scope: RetrievalScope,
+        session: object,
+    ) -> list[Document]:
+        self.calls.append({
+            "query": query,
+            "scope": scope,
+            "session": session,
+        })
         return self.documents
 
 
@@ -124,6 +145,17 @@ def build_service(
     )
 
 
+def answer(
+    service: AnswerService,
+    question: str,
+):
+    return service.answer(
+        question,
+        scope=TEST_SCOPE,
+        session=TEST_SESSION,
+    )
+
+
 def test_initializes_structured_model_with_expected_settings(
     monkeypatch,
 ) -> None:
@@ -158,9 +190,9 @@ def test_blank_question_is_rejected_before_retrieval(
     )
 
     with pytest.raises(ValueError, match="问题不能为空"):
-        service.answer("   ")
+        answer(service, "   ")
 
-    assert retrieval.queries == []
+    assert retrieval.calls == []
     assert llm.calls == []
 
 
@@ -173,9 +205,13 @@ def test_empty_retrieval_result_returns_refusal_without_model_call(
         documents=[],
     )
 
-    result = service.answer("知识库里有相关制度吗？")
+    result = answer(service, "知识库里有相关制度吗？")
 
-    assert retrieval.queries == ["知识库里有相关制度吗？"]
+    assert retrieval.calls == [{
+        "query": "知识库里有相关制度吗？",
+        "scope": TEST_SCOPE,
+        "session": TEST_SESSION,
+    }]
     assert llm.calls == []
     assert result.answer == REFUSAL_TEXT
     assert result.answerable is False
@@ -201,7 +237,7 @@ def test_model_refusal_preserves_reason(monkeypatch) -> None:
         ),
     )
 
-    result = service.answer("董事长出生日期是什么？")
+    result = answer(service, "董事长出生日期是什么？")
 
     assert result.answer == REFUSAL_TEXT
     assert result.answerable is False
@@ -218,7 +254,7 @@ def test_model_refusal_uses_default_reason(monkeypatch) -> None:
         model_result=AnswerDraft(answerable=False),
     )
 
-    result = service.answer("无法回答的问题")
+    result = answer(service, "无法回答的问题")
 
     assert result.answerable is False
     assert result.refusal_reason == "知识库资料不足。"
@@ -258,11 +294,16 @@ def test_valid_claims_render_answer_and_citation_metadata(
         documents=documents,
     )
 
-    result = service.answer("抵扣比例和制度生效日期是什么？")
+    result = answer(
+        service,
+        "抵扣比例和制度生效日期是什么？",
+    )
 
-    assert retrieval.queries == [
-        "抵扣比例和制度生效日期是什么？"
-    ]
+    assert retrieval.calls == [{
+        "query": "抵扣比例和制度生效日期是什么？",
+        "scope": TEST_SCOPE,
+        "session": TEST_SESSION,
+    }]
     assert result.answerable is True
     assert result.answer == (
         "服务费抵扣比例为10%。[资料1]\n"
@@ -308,7 +349,7 @@ def test_repeated_citation_is_returned_only_once(
         model_result=draft,
     )
 
-    result = service.answer("可用性和抵扣比例是什么？")
+    result = answer(service, "可用性和抵扣比例是什么？")
 
     assert result.answerable is True
     assert len(result.citations) == 1
@@ -331,7 +372,7 @@ def test_unknown_citation_falls_back_to_refusal(
         ),
     )
 
-    result = service.answer("抵扣比例是什么？")
+    result = answer(service, "抵扣比例是什么？")
 
     assert result.answerable is False
     assert result.answer == REFUSAL_TEXT
@@ -354,7 +395,7 @@ def test_unsupported_number_falls_back_to_refusal(
         ),
     )
 
-    result = service.answer("抵扣比例是什么？")
+    result = answer(service, "抵扣比例是什么？")
 
     assert result.answerable is False
     assert "20%" in result.refusal_reason
@@ -385,7 +426,8 @@ def test_number_from_question_passes_range_evidence_validation(
         ],
     )
 
-    result = service.answer(
+    result = answer(
+        service,
         "月度可用性为99.2%时服务抵扣比例是多少？"
     )
 
@@ -413,7 +455,7 @@ def test_dictionary_model_result_is_validated_and_rendered(
         },
     )
 
-    result = service.answer("抵扣比例是什么？")
+    result = answer(service, "抵扣比例是什么？")
 
     assert result.answerable is True
     assert result.answer == "抵扣比例为10%。[资料1]"
@@ -430,7 +472,7 @@ def test_model_prompt_contains_question_and_built_context(
         ),
     )
 
-    service.answer("月度可用性是多少？")
+    answer(service, "月度可用性是多少？")
 
     assert len(llm.calls) == 1
     messages = llm.calls[0]

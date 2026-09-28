@@ -26,11 +26,7 @@ def _valid_embedding() -> list[float]:
 
 
 def _repository(
-    rows: list[tuple[
-        DocumentChunk,
-        KnowledgeDocument,
-        float,
-    ]] | None = None,
+    rows: list[tuple] | None = None,
 ) -> tuple[PgVectorRepository, Mock]:
     session = Mock(spec=Session)
     session.execute.return_value.all.return_value = (
@@ -195,7 +191,80 @@ def test_maps_database_rows_to_search_hits() -> None:
     assert hit.distance == 0.125
     assert hit.metadata["custom"] == "保留"
     assert hit.metadata["tenant_id"] == str(tenant_id)
+    assert hit.metadata["source_id"] == document.source_id
+    assert (
+        hit.metadata["chunk_content_hash"]
+        == chunk.content_hash
+    )
     assert (
         hit.metadata["knowledge_base_id"]
         == str(knowledge_base_id)
     )
+
+
+def test_list_chunks_is_scoped_and_maps_ready_documents() -> None:
+    tenant_id = uuid4()
+    knowledge_base_id = uuid4()
+    document_id = uuid4()
+    document = KnowledgeDocument(
+        id=document_id,
+        tenant_id=tenant_id,
+        knowledge_base_id=knowledge_base_id,
+        created_by_user_id=None,
+        source_id="a" * 64,
+        file_name="开放平台手册.docx",
+        storage_uri="file:///开放平台手册.docx",
+        mime_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        ),
+        content_hash="b" * 64,
+        status="ready",
+        version=1,
+        metadata_json={},
+    )
+    chunk = DocumentChunk(
+        id="c" * 64,
+        tenant_id=tenant_id,
+        knowledge_base_id=knowledge_base_id,
+        document_id=document_id,
+        chunk_index=2,
+        content="API故障处理内容",
+        content_hash="d" * 64,
+        parent_id=None,
+        chunking_version="structured-v1",
+        embedding_model="text-embedding-v4",
+        embedding=_valid_embedding(),
+        metadata_json={"section_path": "故障处理"},
+    )
+    repository, session = _repository([
+        (chunk, document),
+    ])
+    scope = RetrievalScope(
+        tenant_id=tenant_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+
+    results = repository.list_chunks(scope=scope)
+
+    assert len(results) == 1
+    stored = results[0]
+    assert stored.chunk_id == chunk.id
+    assert stored.content == chunk.content
+    assert stored.document_name == document.file_name
+    assert stored.metadata["source_id"] == document.source_id
+    assert stored.metadata["section_path"] == "故障处理"
+
+    statement = session.execute.call_args.args[0]
+    compiled = statement.compile(
+        dialect=postgresql.dialect()
+    )
+    sql = str(compiled)
+
+    assert "document_chunks.tenant_id =" in sql
+    assert "document_chunks.knowledge_base_id =" in sql
+    assert "documents.tenant_id =" in sql
+    assert "documents.knowledge_base_id =" in sql
+    assert "documents.status =" in sql
+    assert scope.tenant_id in compiled.params.values()
+    assert scope.knowledge_base_id in compiled.params.values()

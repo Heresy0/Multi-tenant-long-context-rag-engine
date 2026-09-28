@@ -38,7 +38,6 @@ class Settings:
         self.oss_bucket = required_env("OSS_BUCKET")
 
         self.embedding_model = required_env("DASHSCOPE_EMBEDDING_MODEL")
-        self.chroma_directory = PROJECT_ROOT / "data" / "chroma"
         # 使用新文件，避免和正在运行的命令行脚本共用数据库
         self.database_path = PROJECT_ROOT / "weather_api.sqlite"
 

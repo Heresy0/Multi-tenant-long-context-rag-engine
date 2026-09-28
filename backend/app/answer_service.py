@@ -5,6 +5,7 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain_openai import ChatOpenAI
+from sqlalchemy.orm import Session
 
 from .answer_models import (
     AnswerDraft,
@@ -20,6 +21,7 @@ from .context_builder import (
 )
 from .prompts import ANSWER_SYSTEM_PROMPT
 from .retrieval_service import RetrievalService
+from .security.retrieval_scope import RetrievalScope
 
 
 REFUSAL_TEXT = (
@@ -64,7 +66,13 @@ class AnswerService:
             llm.with_structured_output(AnswerDraft)
         )
 
-    def answer(self, question: str) -> AnswerResult:
+    def answer(
+        self,
+        question: str,
+        *,
+        scope: RetrievalScope,
+        session: Session,
+    ) -> AnswerResult:
         question = question.strip()
 
         if not question:
@@ -83,7 +91,9 @@ class AnswerService:
 
         search_started = time.perf_counter()
         documents = self._retrieval_service.search(
-            question
+            question,
+            scope=scope,
+            session=session,
         )
         timings["search_total_ms"] = _elapsed_ms(
             search_started

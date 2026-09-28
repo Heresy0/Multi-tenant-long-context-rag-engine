@@ -18,6 +18,7 @@ class ChatResponse(BaseModel):
 
 
 class KnowledgeQuestionRequest(BaseModel):
+    knowledge_base_id: UUID
     question: str = Field(
         min_length=1,
         max_length=1000,

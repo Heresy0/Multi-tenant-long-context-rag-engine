@@ -1,153 +1,252 @@
-from pathlib import Path
+from uuid import uuid4
 
+from langchain_core.embeddings import Embeddings
 import pytest
-from langchain_core.documents import Document
 
 from backend.app import retrieval_service as service_module
+from backend.app.db.models import EMBEDDING_DIMENSION
+from backend.app.reranker import BaseReranker, RerankResult
 from backend.app.retrieval_service import RetrievalService
+from backend.app.security.retrieval_scope import RetrievalScope
+from backend.app.vector_repository import (
+    PgVectorRepository,
+    StoredChunk,
+    VectorSearchHit,
+)
 
 
-class FakeRetriever:
-    def __init__(self, name: str) -> None:
-        self.name = name
+class FakeEmbeddings(Embeddings):
+    def __init__(self) -> None:
         self.queries: list[str] = []
 
-    def invoke(self, query: str) -> list[Document]:
-        self.queries.append(query)
+    def embed_documents(
+        self,
+        texts: list[str],
+    ) -> list[list[float]]:
+        return [self._vector() for _text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        self.queries.append(text)
+        return self._vector()
+
+    @staticmethod
+    def _vector() -> list[float]:
+        return [1.0] + [0.0] * (
+            EMBEDDING_DIMENSION - 1
+        )
+
+
+class FakeReranker(BaseReranker):
+    calls: list[dict]
+
+    def rerank(
+        self,
+        *,
+        query: str,
+        documents: list[str],
+        top_n: int,
+    ) -> list[RerankResult]:
+        self.calls.append({
+            "query": query,
+            "documents": documents,
+            "top_n": top_n,
+        })
         return [
-            Document(
-                page_content=self.name,
-                metadata={"retriever": self.name},
+            RerankResult(
+                index=0,
+                relevance_score=0.97,
             )
         ]
 
 
-def test_search_lazily_builds_and_reuses_retriever(
-    monkeypatch,
-) -> None:
-    built: list[FakeRetriever] = []
+class FakeRepository(PgVectorRepository):
+    def __init__(
+        self,
+        chunks: list[StoredChunk],
+        hits: list[VectorSearchHit],
+    ) -> None:
+        self.chunks = chunks
+        self.hits = hits
+        self.list_scopes: list[RetrievalScope] = []
+        self.search_calls: list[dict] = []
 
-    def fake_create_retriever(**kwargs) -> FakeRetriever:
-        retriever = FakeRetriever(f"retriever-{len(built) + 1}")
-        built.append(retriever)
-        return retriever
-
-    monkeypatch.setattr(
-        service_module,
-        "create_retriever",
-        fake_create_retriever,
-    )
-
-    service = RetrievalService(settings=object())
-
-    assert built == []
-    assert service.search("question-1")[0].page_content == "retriever-1"
-    assert service.search("question-2")[0].page_content == "retriever-1"
-    assert len(built) == 1
-    assert built[0].queries == ["question-1", "question-2"]
-
-
-def test_refresh_replaces_retriever(monkeypatch) -> None:
-    built: list[FakeRetriever] = []
-
-    def fake_create_retriever(**kwargs) -> FakeRetriever:
-        retriever = FakeRetriever(f"retriever-{len(built) + 1}")
-        built.append(retriever)
-        return retriever
-
-    monkeypatch.setattr(
-        service_module,
-        "create_retriever",
-        fake_create_retriever,
-    )
-
-    service = RetrievalService(settings=object())
-
-    assert service.search("before")[0].page_content == "retriever-1"
-
-    service.refresh()
-
-    assert service.search("after")[0].page_content == "retriever-2"
-    assert len(built) == 2
-
-
-def test_failed_refresh_keeps_previous_retriever(
-    monkeypatch,
-) -> None:
-    original = FakeRetriever("original")
-    attempts = 0
-
-    def fake_create_retriever(**kwargs) -> FakeRetriever:
-        nonlocal attempts
-        attempts += 1
-
-        if attempts == 1:
-            return original
-
-        raise RuntimeError("rebuild failed")
-
-    monkeypatch.setattr(
-        service_module,
-        "create_retriever",
-        fake_create_retriever,
-    )
-
-    service = RetrievalService(settings=object())
-    service.search("before")
-
-    with pytest.raises(RuntimeError, match="rebuild failed"):
-        service.refresh()
-
-    assert service.search("after")[0].page_content == "original"
-    assert original.queries == ["before", "after"]
-
-
-@pytest.mark.parametrize(
-    ("written_count", "expected_builds"),
-    [
-        (0, 0),
-        (3, 1),
-    ],
-)
-def test_index_file_refreshes_only_when_data_changed(
-    monkeypatch,
-    tmp_path: Path,
-    written_count: int,
-    expected_builds: int,
-) -> None:
-    build_count = 0
-    indexed: list[tuple[Path, object]] = []
-    settings = object()
-
-    def fake_create_retriever(**kwargs) -> FakeRetriever:
-        nonlocal build_count
-        build_count += 1
-        return FakeRetriever("refreshed")
-
-    def fake_index_file(
-        file_path: str | Path,
+    def list_chunks(
+        self,
         *,
-        settings: object,
-    ) -> int:
-        indexed.append((Path(file_path), settings))
-        return written_count
+        scope: RetrievalScope,
+    ) -> list[StoredChunk]:
+        self.list_scopes.append(scope)
+        return self.chunks
+
+    def search(
+        self,
+        *,
+        scope: RetrievalScope,
+        query_embedding: list[float],
+        limit: int,
+    ) -> list[VectorSearchHit]:
+        self.search_calls.append({
+            "scope": scope,
+            "query_embedding": query_embedding,
+            "limit": limit,
+        })
+        return self.hits
+
+
+def _scope() -> RetrievalScope:
+    return RetrievalScope(
+        tenant_id=uuid4(),
+        knowledge_base_id=uuid4(),
+    )
+
+
+def _stored_chunk(
+    scope: RetrievalScope,
+) -> StoredChunk:
+    return StoredChunk(
+        chunk_id="chunk-1",
+        document_id=uuid4(),
+        tenant_id=scope.tenant_id,
+        knowledge_base_id=scope.knowledge_base_id,
+        content="RATE-001 表示请求频率超过限制。",
+        document_name="开放平台手册.docx",
+        source="file:///开放平台手册.docx",
+        metadata={
+            "source_id": "source-1",
+            "chunk_content_hash": "hash-1",
+        },
+    )
+
+
+def _search_hit(
+    chunk: StoredChunk,
+) -> VectorSearchHit:
+    return VectorSearchHit(
+        chunk_id=chunk.chunk_id,
+        document_id=chunk.document_id,
+        tenant_id=chunk.tenant_id,
+        knowledge_base_id=chunk.knowledge_base_id,
+        content=chunk.content,
+        document_name=chunk.document_name,
+        source=chunk.source,
+        metadata=chunk.metadata,
+        distance=0.05,
+    )
+
+
+def _service(
+    monkeypatch,
+    repository: FakeRepository,
+) -> tuple[
+    RetrievalService,
+    FakeEmbeddings,
+    FakeReranker,
+    list[object],
+]:
+    embeddings = FakeEmbeddings()
+    reranker = FakeReranker(calls=[])
+    sessions: list[object] = []
+
+    def create_repository(session: object) -> FakeRepository:
+        sessions.append(session)
+        return repository
 
     monkeypatch.setattr(
         service_module,
-        "create_retriever",
-        fake_create_retriever,
-    )
-    monkeypatch.setattr(
-        service_module,
-        "index_rag_file",
-        fake_index_file,
+        "PgVectorRepository",
+        create_repository,
     )
 
-    service = RetrievalService(settings=settings)
-    file_path = tmp_path / "knowledge.docx"
+    service = RetrievalService(
+        settings=object(),
+        embeddings=embeddings,
+        reranker=reranker,
+    )
+    return service, embeddings, reranker, sessions
 
-    result = service.index_file(file_path)
 
-    assert result == written_count
-    assert indexed == [(file_path, settings)]
-    assert build_count == expected_builds
+def test_rejects_blank_query_before_database_access(
+    monkeypatch,
+) -> None:
+    repository = FakeRepository([], [])
+    service, embeddings, reranker, sessions = _service(
+        monkeypatch,
+        repository,
+    )
+
+    with pytest.raises(ValueError, match="问题不能为空"):
+        service.search(
+            "   ",
+            scope=_scope(),
+            session=object(),
+        )
+
+    assert sessions == []
+    assert embeddings.queries == []
+    assert reranker.calls == []
+
+
+def test_empty_scope_returns_without_embedding_or_reranking(
+    monkeypatch,
+) -> None:
+    scope = _scope()
+    session = object()
+    repository = FakeRepository([], [])
+    service, embeddings, reranker, sessions = _service(
+        monkeypatch,
+        repository,
+    )
+
+    results = service.search(
+        "没有资料的问题",
+        scope=scope,
+        session=session,
+    )
+
+    assert results == []
+    assert sessions == [session]
+    assert repository.list_scopes == [scope]
+    assert repository.search_calls == []
+    assert embeddings.queries == []
+    assert reranker.calls == []
+
+
+def test_search_runs_scoped_pgvector_hybrid_and_rerank_pipeline(
+    monkeypatch,
+) -> None:
+    scope = _scope()
+    session = object()
+    chunk = _stored_chunk(scope)
+    repository = FakeRepository(
+        [chunk],
+        [_search_hit(chunk)],
+    )
+    service, embeddings, reranker, sessions = _service(
+        monkeypatch,
+        repository,
+    )
+
+    results = service.search(
+        "  RATE-001 是什么？  ",
+        scope=scope,
+        session=session,
+    )
+
+    assert sessions == [session]
+    assert repository.list_scopes == [scope]
+    assert embeddings.queries == ["RATE-001 是什么？"]
+    assert len(repository.search_calls) == 1
+    assert repository.search_calls[0]["scope"] == scope
+    assert repository.search_calls[0]["limit"] == 30
+    assert reranker.calls == [{
+        "query": "RATE-001 是什么？",
+        "documents": [chunk.content],
+        "top_n": 8,
+    }]
+    assert len(results) == 1
+    assert results[0].id == chunk.chunk_id
+    assert results[0].metadata["rerank_status"] == "success"
+    assert results[0].metadata["rerank_score"] == 0.97
+    assert results[0].metadata["tenant_id"] == str(
+        scope.tenant_id
+    )

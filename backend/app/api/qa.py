@@ -5,13 +5,24 @@ from fastapi import (
     Depends,
     HTTPException,
     Request,
+    status,
 )
+from sqlalchemy.orm import Session
 
 from ..answer_service import AnswerService
+from ..db.dependencies import get_database_session
 from ..schemas import (
     KnowledgeQuestionRequest,
     KnowledgeQuestionResponse,
 )
+from ..security.authorization import (
+    AuthorizationDenied,
+    AuthorizationService,
+)
+from ..security.dependencies import (
+    get_current_principal,
+)
+from ..security.principal import Principal
 
 
 logger = logging.getLogger(__name__)
@@ -36,19 +47,44 @@ def get_answer_service(
 )
 def answer_question(
     payload: KnowledgeQuestionRequest,
+    principal: Principal = Depends(
+        get_current_principal
+    ),
+    session: Session = Depends(
+        get_database_session
+    ),
     answer_service: AnswerService = Depends(
         get_answer_service
     ),
 ) -> KnowledgeQuestionResponse:
-    """执行经过引用校验的知识库问答。"""
+    """在授权知识库范围内执行问答。"""
     try:
+        authorization = AuthorizationService(session)
+
+        scope = (
+            authorization.require_retrieval_scope(
+                principal=principal,
+                knowledge_base_id=(
+                    payload.knowledge_base_id
+                ),
+            )
+        )
+
         result = answer_service.answer(
-            payload.question
+            payload.question,
+            scope=scope,
+            session=session,
         )
 
         return KnowledgeQuestionResponse(
             **result.model_dump()
         )
+
+    except AuthorizationDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
 
     except ValueError as exc:
         raise HTTPException(

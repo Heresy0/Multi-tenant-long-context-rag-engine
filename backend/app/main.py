@@ -1,10 +1,8 @@
-from .agent import EnterpriseAgent
-from .config import Settings,PROJECT_ROOT
-from langgraph.checkpoint.sqlite import SqliteSaver
 from contextlib import ExitStack, asynccontextmanager
+
 from fastapi import FastAPI
-from .api.chat import router as chat_router
-from .chat_history import ChatHistoryRepository
+
+from .config import Settings
 from .retrieval_service import RetrievalService
 from .answer_service import AnswerService
 from .api.qa import router as qa_router
@@ -22,13 +20,7 @@ from .security.oidc import OidcTokenVerifier
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """初始化应用服务，并在关闭时释放数据库连接。"""
-    database_path = (PROJECT_ROOT / "agent_memory.sqlite")
-    database_path.parent.mkdir(parents=True, exist_ok=True)
-
     with ExitStack() as stack:
-        checkpointer = stack.enter_context(SqliteSaver.from_conn_string(str(database_path)))
-        checkpointer.setup()
-
         settings = Settings()
 
         app.state.oidc_token_verifier = OidcTokenVerifier(
@@ -62,21 +54,6 @@ async def lifespan(app: FastAPI):
 
         app.state.answer_service = answer_service
 
-        app.state.retrieval_service = retrieval_service
-
-        app.state.enterprise_agent = EnterpriseAgent(
-            settings=settings,
-            checkpointer=checkpointer,
-            retrieval_service=retrieval_service,
-        )
-
-        history_repository = ChatHistoryRepository(
-            PROJECT_ROOT/"chat_history.sqlite"
-        )
-        history_repository.setup()
-
-        app.state.chat_history = history_repository
-
         yield
 
 
@@ -86,7 +63,6 @@ app = FastAPI(
     lifespan=lifespan
     )
 
-app.include_router(chat_router)
 app.include_router(qa_router)
 app.include_router(knowledge_base_router)
 

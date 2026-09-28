@@ -15,7 +15,6 @@ openai==2.54.0
 # RAG 文档加载、切分、向量存储与文件解析
 langchain-community==0.4.2
 langchain-text-splitters==1.1.2
-langchain-chroma==1.1.0
 pypdf==6.19.0
 docx2txt==0.9
 python-docx==1.2.0

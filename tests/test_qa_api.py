@@ -1,12 +1,40 @@
+from uuid import uuid4
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.app.api import qa as qa_module
 from backend.app.answer_models import (
     AnswerResult,
     AnswerTimings,
     Citation,
 )
 from backend.app.api.qa import router
+from backend.app.db.dependencies import get_database_session
+from backend.app.security.authorization import (
+    AuthorizationDenied,
+)
+from backend.app.security.dependencies import (
+    get_current_principal,
+)
+from backend.app.security.principal import Principal
+from backend.app.security.retrieval_scope import (
+    RetrievalScope,
+)
+
+
+TENANT_ID = uuid4()
+USER_ID = uuid4()
+KNOWLEDGE_BASE_ID = uuid4()
+TEST_PRINCIPAL = Principal(
+    user_id=USER_ID,
+    tenant_id=TENANT_ID,
+    external_subject="alice",
+)
+TEST_SCOPE = RetrievalScope(
+    tenant_id=TENANT_ID,
+    knowledge_base_id=KNOWLEDGE_BASE_ID,
+)
 
 
 class FakeAnswerService:
@@ -18,10 +46,20 @@ class FakeAnswerService:
     ) -> None:
         self.result = result
         self.error = error
-        self.questions: list[str] = []
+        self.calls: list[dict] = []
 
-    def answer(self, question: str) -> AnswerResult:
-        self.questions.append(question)
+    def answer(
+        self,
+        question: str,
+        *,
+        scope: RetrievalScope,
+        session: object,
+    ) -> AnswerResult:
+        self.calls.append({
+            "question": question,
+            "scope": scope,
+            "session": session,
+        })
 
         if self.error is not None:
             raise self.error
@@ -32,19 +70,80 @@ class FakeAnswerService:
         return self.result
 
 
+class FakeAuthorizationService:
+    def __init__(
+        self,
+        *,
+        scope: RetrievalScope,
+        error: Exception | None = None,
+    ) -> None:
+        self.scope = scope
+        self.error = error
+        self.sessions: list[object] = []
+        self.calls: list[dict] = []
+
+    def require_retrieval_scope(
+        self,
+        *,
+        principal: Principal,
+        knowledge_base_id,
+    ) -> RetrievalScope:
+        self.calls.append({
+            "principal": principal,
+            "knowledge_base_id": knowledge_base_id,
+        })
+
+        if self.error is not None:
+            raise self.error
+
+        return self.scope
+
+
 def create_test_client(
+    monkeypatch,
     answer_service: FakeAnswerService,
-) -> TestClient:
+    *,
+    authorization_error: Exception | None = None,
+    authenticated: bool = True,
+) -> tuple[TestClient, FakeAuthorizationService, object]:
     # 使用独立应用，不执行正式项目的 lifespan，
-    # 因而不会连接真实模型、Chroma 或 SQLite。
+    # 因而不会连接真实模型或数据库。
     app = FastAPI()
     app.state.answer_service = answer_service
     app.include_router(router)
+    session = object()
+    authorization = FakeAuthorizationService(
+        scope=TEST_SCOPE,
+        error=authorization_error,
+    )
 
-    return TestClient(app)
+    app.dependency_overrides[
+        get_database_session
+    ] = lambda: session
+
+    if authenticated:
+        app.dependency_overrides[
+            get_current_principal
+        ] = lambda: TEST_PRINCIPAL
+
+    def create_authorization_service(
+        actual_session: object,
+    ) -> FakeAuthorizationService:
+        authorization.sessions.append(actual_session)
+        return authorization
+
+    monkeypatch.setattr(
+        qa_module,
+        "AuthorizationService",
+        create_authorization_service,
+    )
+
+    return TestClient(app), authorization, session
 
 
-def test_qa_returns_answer_with_citations() -> None:
+def test_qa_returns_answer_with_citations(
+    monkeypatch,
+) -> None:
     service = FakeAnswerService(
         result=AnswerResult(
             answer="抵扣比例为10%。[资料1]",
@@ -70,17 +169,30 @@ def test_qa_returns_answer_with_citations() -> None:
             ],
         )
     )
-    client = create_test_client(service)
+    client, authorization, session = create_test_client(
+        monkeypatch,
+        service,
+    )
 
     response = client.post(
         "/api/qa",
         json={
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
             "question": "抵扣比例是多少？",
         },
     )
 
     assert response.status_code == 200
-    assert service.questions == ["抵扣比例是多少？"]
+    assert authorization.sessions == [session]
+    assert authorization.calls == [{
+        "principal": TEST_PRINCIPAL,
+        "knowledge_base_id": KNOWLEDGE_BASE_ID,
+    }]
+    assert service.calls == [{
+        "question": "抵扣比例是多少？",
+        "scope": TEST_SCOPE,
+        "session": session,
+    }]
     assert response.json() == {
         "answer": "抵扣比例为10%。[资料1]",
         "answerable": True,
@@ -107,7 +219,9 @@ def test_qa_returns_answer_with_citations() -> None:
     }
 
 
-def test_qa_returns_normal_refusal_with_http_200() -> None:
+def test_qa_returns_normal_refusal_with_http_200(
+    monkeypatch,
+) -> None:
     service = FakeAnswerService(
         result=AnswerResult(
             answer=(
@@ -119,11 +233,15 @@ def test_qa_returns_normal_refusal_with_http_200() -> None:
             refusal_reason="资料没有说明该信息。",
         )
     )
-    client = create_test_client(service)
+    client, _, _ = create_test_client(
+        monkeypatch,
+        service,
+    )
 
     response = client.post(
         "/api/qa",
         json={
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
             "question": "董事长出生日期是什么？",
         },
     )
@@ -137,72 +255,116 @@ def test_qa_returns_normal_refusal_with_http_200() -> None:
     )
 
 
-def test_qa_converts_blank_question_error_to_422() -> None:
+def test_qa_converts_blank_question_error_to_422(
+    monkeypatch,
+) -> None:
     service = FakeAnswerService(
         error=ValueError("问题不能为空")
     )
-    client = create_test_client(service)
+    client, _, session = create_test_client(
+        monkeypatch,
+        service,
+    )
 
     response = client.post(
         "/api/qa",
-        json={"question": "   "},
+        json={
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
+            "question": "   ",
+        },
     )
 
     assert response.status_code == 422
     assert response.json() == {
         "detail": "问题不能为空"
     }
-    assert service.questions == ["   "]
+    assert service.calls == [{
+        "question": "   ",
+        "scope": TEST_SCOPE,
+        "session": session,
+    }]
 
 
-def test_qa_rejects_missing_question_before_service_call() -> None:
+def test_qa_rejects_missing_question_before_service_call(
+    monkeypatch,
+) -> None:
     service = FakeAnswerService()
-    client = create_test_client(service)
-
-    response = client.post(
-        "/api/qa",
-        json={},
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
     )
-
-    assert response.status_code == 422
-    assert service.questions == []
-
-
-def test_qa_rejects_empty_question_before_service_call() -> None:
-    service = FakeAnswerService()
-    client = create_test_client(service)
-
-    response = client.post(
-        "/api/qa",
-        json={"question": ""},
-    )
-
-    assert response.status_code == 422
-    assert service.questions == []
-
-
-def test_qa_rejects_question_over_maximum_length() -> None:
-    service = FakeAnswerService()
-    client = create_test_client(service)
-
-    response = client.post(
-        "/api/qa",
-        json={"question": "问" * 1001},
-    )
-
-    assert response.status_code == 422
-    assert service.questions == []
-
-
-def test_qa_converts_unexpected_service_error_to_503() -> None:
-    service = FakeAnswerService(
-        error=RuntimeError("upstream unavailable")
-    )
-    client = create_test_client(service)
 
     response = client.post(
         "/api/qa",
         json={
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
+        },
+    )
+
+    assert response.status_code == 422
+    assert authorization.calls == []
+    assert service.calls == []
+
+
+def test_qa_rejects_empty_question_before_service_call(
+    monkeypatch,
+) -> None:
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
+            "question": "",
+        },
+    )
+
+    assert response.status_code == 422
+    assert authorization.calls == []
+    assert service.calls == []
+
+
+def test_qa_rejects_question_over_maximum_length(
+    monkeypatch,
+) -> None:
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
+            "question": "问" * 1001,
+        },
+    )
+
+    assert response.status_code == 422
+    assert authorization.calls == []
+    assert service.calls == []
+
+
+def test_qa_converts_unexpected_service_error_to_503(
+    monkeypatch,
+) -> None:
+    service = FakeAnswerService(
+        error=RuntimeError("upstream unavailable")
+    )
+    client, _, session = create_test_client(
+        monkeypatch,
+        service,
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
             "question": "报销流程是什么？",
         },
     )
@@ -211,4 +373,61 @@ def test_qa_converts_unexpected_service_error_to_503() -> None:
     assert response.json() == {
         "detail": "知识库问答服务暂时不可用。"
     }
-    assert service.questions == ["报销流程是什么？"]
+    assert service.calls == [{
+        "question": "报销流程是什么？",
+        "scope": TEST_SCOPE,
+        "session": session,
+    }]
+
+
+def test_qa_requires_authentication(monkeypatch) -> None:
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+        authenticated=False,
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
+            "question": "技术手册讲了什么？",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "未认证。"
+    assert authorization.calls == []
+    assert service.calls == []
+
+
+def test_qa_rejects_unauthorized_knowledge_base(
+    monkeypatch,
+) -> None:
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+        authorization_error=AuthorizationDenied(
+            "没有权限访问该知识库。"
+        ),
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
+            "question": "人力资源制度是什么？",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "没有权限访问该知识库。"
+    }
+    assert authorization.calls == [{
+        "principal": TEST_PRINCIPAL,
+        "knowledge_base_id": KNOWLEDGE_BASE_ID,
+    }]
+    assert service.calls == []
