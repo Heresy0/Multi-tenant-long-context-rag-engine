@@ -1,0 +1,499 @@
+{
+  "created_at": "2026-09-28T16:12:22.737029+00:00",
+  "config": {
+    "dataset": "evals\\datasets\\answer_test.jsonl",
+    "endpoint": "http://127.0.0.1:8000/api/qa",
+    "knowledge_base_id": "8e4af664-22c1-480e-9393-36ac401da0f5",
+    "authentication": "bearer",
+    "timeout_seconds": 120.0,
+    "limit": null,
+    "categories": [
+      "technical",
+      "unanswerable"
+    ],
+    "delay_ms": 0.0
+  },
+  "summary": {
+    "total": 11,
+    "successful": 11,
+    "errors": 0,
+    "answerable": 3,
+    "unanswerable": 8,
+    "answerability_accuracy": 1.0,
+    "answerable_accept_rate": 1.0,
+    "unanswerable_rejection_rate": 1.0,
+    "unanswerable_false_accept_rate": 0.0,
+    "answerability_confusion": {
+      "true_positive": 3,
+      "false_negative": 0,
+      "true_negative": 8,
+      "false_positive": 0
+    },
+    "required_fact_coverage": 0.9286,
+    "fact_complete_rate": 0.6667,
+    "citation_source_precision": 1.0,
+    "citation_source_recall": 1.0,
+    "citation_case_hit_rate": 1.0,
+    "unanswerable_citation_free_rate": 1.0,
+    "mean_latency_ms": 8551.12,
+    "p50_latency_ms": 7153.73,
+    "p95_latency_ms": 13521.95,
+    "stage_latency": {
+      "hybrid_retrieval_ms": {
+        "count": 11,
+        "mean_ms": 257.33,
+        "p50_ms": 179.46,
+        "p95_ms": 564.4
+      },
+      "rerank_ms": {
+        "count": 11,
+        "mean_ms": 829.11,
+        "p50_ms": 795.0,
+        "p95_ms": 946.92
+      },
+      "search_total_ms": {
+        "count": 11,
+        "mean_ms": 1113.87,
+        "p50_ms": 1061.22,
+        "p95_ms": 1371.81
+      },
+      "context_build_ms": {
+        "count": 11,
+        "mean_ms": 0.05,
+        "p50_ms": 0.05,
+        "p95_ms": 0.07
+      },
+      "generation_ms": {
+        "count": 11,
+        "mean_ms": 7402.71,
+        "p50_ms": 6143.73,
+        "p95_ms": 12257.02
+      },
+      "validation_ms": {
+        "count": 11,
+        "mean_ms": 0.11,
+        "p50_ms": 0.03,
+        "p95_ms": 0.36
+      },
+      "render_ms": {
+        "count": 11,
+        "mean_ms": 0.02,
+        "p50_ms": 0.01,
+        "p95_ms": 0.03
+      },
+      "total_ms": {
+        "count": 11,
+        "mean_ms": 8516.8,
+        "p50_ms": 7128.87,
+        "p95_ms": 13478.56
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "ans-test-tech-001",
+      "category": "technical",
+      "difficulty": "medium",
+      "question": "写操作是否必须提供幂等键，同一个幂等键的有效期多长？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 12288.53,
+      "timings": {
+        "hybrid_retrieval_ms": 577.68,
+        "rerank_ms": 756.02,
+        "search_total_ms": 1362.68,
+        "context_build_ms": 0.05,
+        "generation_ms": 10891.6,
+        "validation_ms": 0.27,
+        "render_ms": 0.03,
+        "total_ms": 12254.66
+      },
+      "answer": "创建订单、发起付款和提交审批等写操作必须提供Idempotency-Key。[资料1]\n同一业务操作重试时幂等键保持不变，有效期为24小时。[资料2]",
+      "reference_answer": "写操作必须提供Idempotency-Key；同一业务操作重试时应保持不变，其有效期为24小时。",
+      "refusal_reason": null,
+      "required_facts": [
+        "写操作必须",
+        "Idempotency-Key",
+        "24小时"
+      ],
+      "matched_facts": [
+        "写操作必须",
+        "Idempotency-Key",
+        "24小时"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "cited_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "matched_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-test-tech-002",
+      "category": "technical",
+      "difficulty": "hard",
+      "question": "开放平台允许自动重试哪些网络或HTTP错误，建议采用什么等待序列，最多重试几次？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 13637.46,
+      "timings": {
+        "hybrid_retrieval_ms": 251.88,
+        "rerank_ms": 786.66,
+        "search_total_ms": 1061.22,
+        "context_build_ms": 0.05,
+        "generation_ms": 12529.44,
+        "validation_ms": 0.43,
+        "render_ms": 0.03,
+        "total_ms": 13591.19
+      },
+      "answer": "开放平台允许自动重试网络错误、429、502、503和504。[资料1]\n建议采用带随机抖动的指数退避，等待序列为1秒、2秒、4秒。[资料1]\n最多重试3次。[资料1]",
+      "reference_answer": "只应对网络错误以及HTTP 429、502、503和504进行自动重试；应采用带随机抖动的指数退避，建议等待1秒、2秒、4秒，最多重试3次。",
+      "refusal_reason": null,
+      "required_facts": [
+        "网络错误",
+        "429",
+        "502",
+        "503",
+        "504",
+        "随机抖动的指数退避",
+        "1秒、2秒、4秒",
+        "最多重试3次"
+      ],
+      "matched_facts": [
+        "网络错误",
+        "429",
+        "502",
+        "503",
+        "504",
+        "随机抖动的指数退避",
+        "1秒、2秒、4秒",
+        "最多重试3次"
+      ],
+      "missing_facts": [],
+      "fact_complete": true,
+      "expected_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "cited_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "matched_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-test-tech-003",
+      "category": "technical",
+      "difficulty": "hard",
+      "question": "Webhook验签允许时间戳与本地时间最多相差多久，未收到成功响应会重试多长时间？",
+      "expected_answerable": true,
+      "predicted_answerable": true,
+      "status": "ok",
+      "latency_ms": 13406.45,
+      "timings": {
+        "hybrid_retrieval_ms": 551.13,
+        "rerank_ms": 806.75,
+        "search_total_ms": 1380.94,
+        "context_build_ms": 0.06,
+        "generation_ms": 11984.6,
+        "validation_ms": 0.29,
+        "render_ms": 0.03,
+        "total_ms": 13365.93
+      },
+      "answer": "Webhook验签时，时间戳与本地时间相差超过5分钟的请求应被拒绝，即允许最多相差5分钟。[资料1]\n平台在未收到2xx响应时会进行重试，最长持续24小时。[资料1]",
+      "reference_answer": "Webhook验签时，时间戳与本地时间相差不得超过5分钟；平台未收到2xx响应时会重试，最长持续24小时。",
+      "refusal_reason": null,
+      "required_facts": [
+        "不得超过5分钟",
+        "未收到2xx响应",
+        "最长持续24小时"
+      ],
+      "matched_facts": [
+        "未收到2xx响应",
+        "最长持续24小时"
+      ],
+      "missing_facts": [
+        "不得超过5分钟"
+      ],
+      "fact_complete": false,
+      "expected_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "cited_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "matched_documents": [
+        "06_开放平台API接入与故障处理技术手册.docx"
+      ],
+      "unexpected_documents": [],
+      "citation_source_hit": true
+    },
+    {
+      "id": "ans-test-na-001",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "公司规定员工每周最多可以居家办公几天？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 6873.09,
+      "timings": {
+        "hybrid_retrieval_ms": 179.46,
+        "rerank_ms": 812.04,
+        "search_total_ms": 1018.42,
+        "context_build_ms": 0.05,
+        "generation_ms": 5832.34,
+        "validation_ms": 0.03,
+        "render_ms": 0.01,
+        "total_ms": 6850.88
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的知识库资料均为开放平台API接入与故障处理技术手册相关内容，未包含员工居家办公天数或每周最多居家办公天数的规定。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-test-na-002",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "员工生育津贴每月具体发放多少钱？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 6345.78,
+      "timings": {
+        "hybrid_retrieval_ms": 176.89,
+        "rerank_ms": 795.0,
+        "search_total_ms": 994.92,
+        "context_build_ms": 0.07,
+        "generation_ms": 5312.6,
+        "validation_ms": 0.03,
+        "render_ms": 0.01,
+        "total_ms": 6307.67
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的知识库资料均为开放平台API接入与故障处理技术手册，未包含员工生育津贴发放金额、标准或相关制度信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-test-na-003",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "员工私家车停车费每月最多可以报销多少元？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 6013.14,
+      "timings": {
+        "hybrid_retrieval_ms": 180.56,
+        "rerank_ms": 782.32,
+        "search_total_ms": 990.98,
+        "context_build_ms": 0.06,
+        "generation_ms": 4999.2,
+        "validation_ms": 0.04,
+        "render_ms": 0.01,
+        "total_ms": 5990.33
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的知识库资料中没有关于员工私家车停车费报销标准或每月报销上限的信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-test-na-004",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "公司账号密码最少需要多少位，并且每隔多少天必须更换？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 6977.6,
+      "timings": {
+        "hybrid_retrieval_ms": 164.19,
+        "rerank_ms": 961.82,
+        "search_total_ms": 1154.32,
+        "context_build_ms": 0.06,
+        "generation_ms": 5797.95,
+        "validation_ms": 0.03,
+        "render_ms": 0.01,
+        "total_ms": 6952.41
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的资料未包含公司账号密码最少位数及定期更换天数的信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-test-na-005",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "开放平台所有API请求的默认超时时间是多少秒？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 6644.77,
+      "timings": {
+        "hybrid_retrieval_ms": 174.25,
+        "rerank_ms": 932.03,
+        "search_total_ms": 1136.64,
+        "context_build_ms": 0.05,
+        "generation_ms": 5483.82,
+        "validation_ms": 0.04,
+        "render_ms": 0.01,
+        "total_ms": 6620.6
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的资料未说明开放平台所有API请求的默认超时时间是多少秒。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-test-na-006",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "公司当前批准采购的供应商名单和联系人分别是谁？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 7153.73,
+      "timings": {
+        "hybrid_retrieval_ms": 167.93,
+        "rerank_ms": 791.87,
+        "search_total_ms": 985.01,
+        "context_build_ms": 0.05,
+        "generation_ms": 6143.73,
+        "validation_ms": 0.03,
+        "render_ms": 0.01,
+        "total_ms": 7128.87
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的知识库资料中没有关于公司当前批准采购的供应商名单及其联系人的信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-test-na-007",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "云服务合同约定由哪个城市的法院管辖，适用哪一部法律？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 7517.97,
+      "timings": {
+        "hybrid_retrieval_ms": 233.06,
+        "rerank_ms": 919.07,
+        "search_total_ms": 1190.61,
+        "context_build_ms": 0.05,
+        "generation_ms": 6250.98,
+        "validation_ms": 0.03,
+        "render_ms": 0.01,
+        "total_ms": 7441.72
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的知识库资料中未包含云服务合同关于管辖法院所在城市及适用法律的约定信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    },
+    {
+      "id": "ans-test-na-008",
+      "category": "unanswerable",
+      "difficulty": "hard",
+      "question": "客户项目验收后，项目成员可以获得合同金额百分之几的奖金？",
+      "expected_answerable": false,
+      "predicted_answerable": false,
+      "status": "ok",
+      "latency_ms": 7203.82,
+      "timings": {
+        "hybrid_retrieval_ms": 173.62,
+        "rerank_ms": 776.59,
+        "search_total_ms": 976.84,
+        "context_build_ms": 0.05,
+        "generation_ms": 6203.53,
+        "validation_ms": 0.03,
+        "render_ms": 0.01,
+        "total_ms": 7180.49
+      },
+      "answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "reference_answer": "根据当前知识库资料，暂时无法回答这个问题。",
+      "refusal_reason": "提供的知识库资料中未包含客户项目验收后项目成员可获得合同金额百分之几奖金的信息。",
+      "required_facts": [],
+      "matched_facts": [],
+      "missing_facts": [],
+      "fact_complete": null,
+      "expected_documents": [],
+      "cited_documents": [],
+      "matched_documents": [],
+      "unexpected_documents": [],
+      "citation_source_hit": null
+    }
+  ]
+}
