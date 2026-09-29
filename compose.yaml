@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - enterprise_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -39,6 +39,36 @@ services:
     mem_limit: 1g
     restart: unless-stopped
 
+  api:
+    build:
+      context: .
+    container_name: enterprise-knowledge-api
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      OIDC_JWKS_URL: http://keycloak:8080/realms/enterprise-knowledge/protocol/openid-connect/certs
+      DOCUMENT_STORAGE_DIR: /app/data/documents
+    command:
+      - sh
+      - -c
+      - >
+        alembic upgrade head &&
+        exec python -m uvicorn backend.app.main:app
+        --host 0.0.0.0
+        --port 8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - enterprise_document_data:/app/data/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   enterprise_postgres_data:
   keycloak_data:
+  enterprise_document_data:
