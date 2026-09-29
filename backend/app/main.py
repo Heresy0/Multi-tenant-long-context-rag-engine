@@ -1,3 +1,5 @@
+import logging
+
 from contextlib import ExitStack, asynccontextmanager
 
 from fastapi import FastAPI
@@ -17,11 +19,35 @@ from .api.knowledge_bases import (
 from .security.oidc import OidcTokenVerifier
 
 
+def configure_application_logging(
+    level_name: str,
+) -> None:
+    """配置 backend.app 下的应用日志。"""
+    application_logger = logging.getLogger(
+        "backend.app"
+    )
+    application_logger.setLevel(level_name)
+
+    if not application_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter("%(message)s")
+        )
+        application_logger.addHandler(handler)
+
+    # 防止继续传递给根日志器而重复输出。
+    application_logger.propagate = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """初始化应用服务，并在关闭时释放数据库连接。"""
     with ExitStack() as stack:
         settings = Settings()
+
+        configure_application_logging(
+            settings.log_level
+        )
 
         app.state.oidc_token_verifier = OidcTokenVerifier(
             issuer=settings.oidc_issuer,

@@ -17,6 +17,10 @@ def required_env(name: str) -> str:
 
 class Settings:
     def __init__(self):
+        self.log_level = (
+            os.getenv("LOG_LEVEL", "INFO").strip().upper()
+            or "INFO"
+        )
         self.database_url = required_env("DATABASE_URL")
 
         self.oidc_issuer = required_env("OIDC_ISSUER").rstrip("/")
