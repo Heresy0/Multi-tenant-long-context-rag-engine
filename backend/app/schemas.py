@@ -1,6 +1,7 @@
 from uuid import UUID
 from pydantic import BaseModel, Field
 from .answer_models import AnswerResult
+from datetime import datetime
 
 
 
@@ -38,3 +39,18 @@ class KnowledgeBaseSummary(BaseModel):
 
 class KnowledgeBaseListResponse(BaseModel):
     items: list[KnowledgeBaseSummary]
+
+
+class KnowledgeDocumentSummary(BaseModel):
+    id: UUID
+    file_name: str
+    mime_type: str
+    status: str
+    version: int
+    chunk_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class KnowledgeDocumentListResponse(BaseModel):
+    items: list[KnowledgeDocumentSummary]
