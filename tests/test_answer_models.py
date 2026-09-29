@@ -32,9 +32,11 @@ def test_answer_result_serializes_nested_citation() -> None:
         citations=[
             Citation(
                 citation_id="资料1",
+                document_id=(
+                    "00000000-0000-0000-0000-000000000001"
+                ),
                 document_name="员工制度",
                 section_path="考勤 > 迟到",
-                source="C:/docs/policy.docx",
                 chunk_id="chunk-1",
             )
         ],
@@ -44,7 +46,11 @@ def test_answer_result_serializes_nested_citation() -> None:
 
     assert dumped["answerable"] is True
     assert dumped["citations"][0]["citation_id"] == "资料1"
+    assert str(
+        dumped["citations"][0]["document_id"]
+    ) == "00000000-0000-0000-0000-000000000001"
     assert dumped["citations"][0]["chunk_id"] == "chunk-1"
+    assert "source" not in dumped["citations"][0]
     assert dumped["refusal_reason"] is None
 
 

@@ -13,6 +13,7 @@ class ContextItem:
     citation_id: str
     content: str
     source: str
+    document_id: str | None
     document_name: str
     section_path: str
     chunk_id: str | None
@@ -131,6 +132,12 @@ class ContextBuilder:
                 citation_id=citation_id,
                 content=content,
                 source=source,
+                document_id=(
+                    str(metadata["document_id"])
+                    if metadata.get("document_id")
+                    is not None
+                    else None
+                ),
                 document_name=document_name,
                 section_path=section_path,
                 chunk_id=(

@@ -13,6 +13,7 @@ def make_document(
     *,
     source: str = "C:/docs/policy.docx",
     source_id: str | None = None,
+    document_id: str | None = None,
     document_name: str = "员工制度",
     section_path: str = "考勤 > 迟到",
     chunk_id: str | None = None,
@@ -27,6 +28,8 @@ def make_document(
 
     if source_id is not None:
         metadata["source_id"] = source_id
+    if document_id is not None:
+        metadata["document_id"] = document_id
     if content_hash is not None:
         metadata["chunk_content_hash"] = content_hash
     if rerank_score is not None:
@@ -64,6 +67,9 @@ def test_build_preserves_rerank_order_and_metadata() -> None:
     documents = [
         make_document(
             "第一条规定。",
+            document_id=(
+                "00000000-0000-0000-0000-000000000001"
+            ),
             chunk_id="chunk-a",
             rerank_score=0.98,
         ),
@@ -87,6 +93,9 @@ def test_build_preserves_rerank_order_and_metadata() -> None:
         "chunk-a",
         "chunk-b",
     ]
+    assert result.items[0].document_id == (
+        "00000000-0000-0000-0000-000000000001"
+    )
     assert [item.rerank_score for item in result.items] == [
         0.98,
         0.87,
@@ -209,6 +218,7 @@ def test_missing_metadata_uses_safe_defaults() -> None:
 
     item = result.items[0]
     assert item.source == "未知来源"
+    assert item.document_id is None
     assert item.document_name == "未知来源"
     assert item.section_path == "未标注章节"
     assert item.chunk_id is None

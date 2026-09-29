@@ -140,7 +140,10 @@ def test_evaluate_case_scores_facts_and_citation_source() -> None:
             "citations": [
                 {
                     "citation_id": "资料1",
-                    "source": r"D:\docs\07_合同.docx",
+                    "document_id": (
+                        "00000000-0000-0000-0000-000000000001"
+                    ),
+                    "document_name": "07_合同.docx",
                 }
             ],
             "refusal_reason": None,
