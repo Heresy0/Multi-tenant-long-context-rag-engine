@@ -5,6 +5,7 @@ from fastapi import (
     status,
     File,
     Request,
+    Response,
     UploadFile,
     )
 from sqlalchemy import select
@@ -38,6 +39,11 @@ from ..pgvector_indexing_service import (
     PgVectorIndexingService,
 )
 from ..security.retrieval_scope import RetrievalScope
+
+from ..document_deletion_service import (
+    DocumentDeletionService,
+    DocumentNotFoundError,
+)
 
 
 router = APIRouter(
@@ -279,4 +285,74 @@ def upload_knowledge_base_document(
             result.indexed_chunk_count
         ),
         skipped=result.skipped,
+    )
+
+
+@router.delete(
+    "/{knowledge_base_id}/documents/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+def delete_knowledge_base_document(
+    knowledge_base_id: UUID,
+    document_id: UUID,
+    request: Request,
+    principal: Principal = Depends(
+        get_current_principal
+    ),
+    session: Session = Depends(
+        get_database_session
+    ),
+) -> Response:
+    """删除指定知识库中的文档。"""
+    authorization = AuthorizationService(session)
+
+    try:
+        authorization.require_permission(
+            principal=principal,
+            knowledge_base_id=knowledge_base_id,
+            required_permission="editor",
+        )
+
+    except AuthorizationDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    scope = RetrievalScope(
+        tenant_id=principal.tenant_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+
+    deletion_service = DocumentDeletionService(
+        session=session,
+        storage_dir=(
+            request.app.state.settings
+            .document_storage_dir
+        ),
+    )
+
+    try:
+        deletion_service.delete(
+            scope=scope,
+            document_id=document_id,
+        )
+
+    except DocumentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail="文档删除失败，请稍后重试。",
+        ) from exc
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT
     )
