@@ -1,4 +1,6 @@
-from uuid import uuid4
+import json
+import logging
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -141,9 +143,33 @@ def create_test_client(
     return TestClient(app), authorization, session
 
 
+def find_log_event(
+    caplog,
+    event_name: str,
+) -> dict:
+    events = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name == qa_module.__name__
+    ]
+    matches = [
+        event
+        for event in events
+        if event.get("event") == event_name
+    ]
+
+    assert len(matches) == 1
+    return matches[0]
+
+
 def test_qa_returns_answer_with_citations(
     monkeypatch,
+    caplog,
 ) -> None:
+    caplog.set_level(
+        logging.INFO,
+        logger=qa_module.__name__,
+    )
     service = FakeAnswerService(
         result=AnswerResult(
             answer="抵扣比例为10%。[资料1]",
@@ -183,6 +209,8 @@ def test_qa_returns_answer_with_citations(
     )
 
     assert response.status_code == 200
+    request_id = response.headers["x-request-id"]
+    UUID(request_id)
     assert authorization.sessions == [session]
     assert authorization.calls == [{
         "principal": TEST_PRINCIPAL,
@@ -217,6 +245,37 @@ def test_qa_returns_answer_with_citations(
             "total_ms": 9926.0,
         },
     }
+
+    completed = find_log_event(
+        caplog,
+        "qa.completed",
+    )
+    assert completed == {
+        "event": "qa.completed",
+        "request_id": request_id,
+        "user_id": str(USER_ID),
+        "tenant_id": str(TENANT_ID),
+        "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
+        "status_code": 200,
+        "answerable": True,
+        "citation_count": 1,
+        "hybrid_retrieval_ms": 120.5,
+        "rerank_ms": 800.25,
+        "search_total_ms": 925.0,
+        "context_build_ms": 0.5,
+        "generation_ms": 9000.0,
+        "validation_ms": 0.3,
+        "render_ms": 0.2,
+        "total_ms": 9926.0,
+    }
+
+    serialized_event = json.dumps(
+        completed,
+        ensure_ascii=False,
+    )
+    assert "抵扣比例是多少？" not in serialized_event
+    assert "抵扣比例为10%" not in serialized_event
+    assert "alice" not in serialized_event
 
 
 def test_qa_returns_normal_refusal_with_http_200(
@@ -352,7 +411,12 @@ def test_qa_rejects_question_over_maximum_length(
 
 def test_qa_converts_unexpected_service_error_to_503(
     monkeypatch,
+    caplog,
 ) -> None:
+    caplog.set_level(
+        logging.ERROR,
+        logger=qa_module.__name__,
+    )
     service = FakeAnswerService(
         error=RuntimeError("upstream unavailable")
     )
@@ -370,6 +434,8 @@ def test_qa_converts_unexpected_service_error_to_503(
     )
 
     assert response.status_code == 503
+    request_id = response.headers["x-request-id"]
+    UUID(request_id)
     assert response.json() == {
         "detail": "知识库问答服务暂时不可用。"
     }
@@ -378,6 +444,20 @@ def test_qa_converts_unexpected_service_error_to_503(
         "scope": TEST_SCOPE,
         "session": session,
     }]
+
+    failed = find_log_event(
+        caplog,
+        "qa.failed",
+    )
+    assert failed == {
+        "event": "qa.failed",
+        "request_id": request_id,
+        "user_id": str(USER_ID),
+        "tenant_id": str(TENANT_ID),
+        "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
+        "status_code": 503,
+        "error_type": "RuntimeError",
+    }
 
 
 def test_qa_requires_authentication(monkeypatch) -> None:
@@ -404,7 +484,12 @@ def test_qa_requires_authentication(monkeypatch) -> None:
 
 def test_qa_rejects_unauthorized_knowledge_base(
     monkeypatch,
+    caplog,
 ) -> None:
+    caplog.set_level(
+        logging.WARNING,
+        logger=qa_module.__name__,
+    )
     service = FakeAnswerService()
     client, authorization, _ = create_test_client(
         monkeypatch,
@@ -423,6 +508,8 @@ def test_qa_rejects_unauthorized_knowledge_base(
     )
 
     assert response.status_code == 403
+    request_id = response.headers["x-request-id"]
+    UUID(request_id)
     assert response.json() == {
         "detail": "没有权限访问该知识库。"
     }
@@ -431,3 +518,16 @@ def test_qa_rejects_unauthorized_knowledge_base(
         "knowledge_base_id": KNOWLEDGE_BASE_ID,
     }]
     assert service.calls == []
+
+    denied = find_log_event(
+        caplog,
+        "qa.denied",
+    )
+    assert denied == {
+        "event": "qa.denied",
+        "request_id": request_id,
+        "user_id": str(USER_ID),
+        "tenant_id": str(TENANT_ID),
+        "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
+        "status_code": 403,
+    }
