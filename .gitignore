@@ -31,3 +31,6 @@ Thumbs.db
 
 #知识库文档
 #sample_docs/
+
+# 上传文件运行时存储
+data/documents/

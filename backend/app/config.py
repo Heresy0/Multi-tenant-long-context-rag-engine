@@ -48,3 +48,22 @@ class Settings:
         self.rerank_model = required_env("DASHSCOPE_RERANK_MODEL")
         self.rerank_url = required_env("DASHSCOPE_RERANK_URL")
         self.rerank_timeout_seconds = float(required_env("RERANK_TIMEOUT_SECONDS"))
+
+        self.document_storage_dir = Path(
+            os.getenv(
+                "DOCUMENT_STORAGE_DIR",
+                str(PROJECT_ROOT / "data" / "documents"),
+            )
+        ).resolve()
+
+        self.max_upload_bytes = int(
+            os.getenv(
+                "MAX_UPLOAD_BYTES",
+                str(20 * 1024 * 1024),
+            )
+        )
+
+        if self.max_upload_bytes < 1:
+            raise RuntimeError(
+                "MAX_UPLOAD_BYTES 必须是正整数"
+            )

@@ -1,0 +1,7 @@
+﻿开放平台测试文档。
+
+访问令牌默认有效期为3600秒。
+发生429错误时，应按照Retry-After进行重试。
+
+Upload API validation record.
+The unique verification code is ORBIT-7429.

@@ -17,6 +17,7 @@ from backend.app.db.models import (
     KnowledgeBase,
     KnowledgeBaseDepartmentGrant,
     KnowledgeBaseUserGrant,
+    KnowledgeDocument,
     Tenant,
     User,
 )
@@ -59,6 +60,8 @@ def api_context() -> Iterator[dict]:
     technology_kb_id = uuid4()
     hr_kb_id = uuid4()
     special_kb_id = uuid4()
+    technology_document_id = uuid4()
+    company_document_id = uuid4()
 
     with session_factory() as session:
         session.add(
@@ -127,6 +130,53 @@ def api_context() -> Iterator[dict]:
                 permission="editor",
             ),
         ])
+
+        session.add_all([
+            KnowledgeDocument(
+                id=technology_document_id,
+                tenant_id=tenant_id,
+                knowledge_base_id=technology_kb_id,
+                created_by_user_id=alice_id,
+                source_id="technology-document",
+                file_name="技术手册.docx",
+                storage_uri=(
+                    "file:///docs/technology.docx"
+                ),
+                mime_type=(
+                    "application/vnd.openxmlformats-"
+                    "officedocument.wordprocessingml."
+                    "document"
+                ),
+                content_hash="a" * 64,
+                status="ready",
+                version=1,
+                metadata_json={
+                    "chunk_count": 15,
+                },
+            ),
+            KnowledgeDocument(
+                id=company_document_id,
+                tenant_id=tenant_id,
+                knowledge_base_id=company_kb_id,
+                created_by_user_id=alice_id,
+                source_id="company-document",
+                file_name="公司制度.docx",
+                storage_uri=(
+                    "file:///docs/company.docx"
+                ),
+                mime_type=(
+                    "application/vnd.openxmlformats-"
+                    "officedocument.wordprocessingml."
+                    "document"
+                ),
+                content_hash="b" * 64,
+                status="ready",
+                version=1,
+                metadata_json={
+                    "chunk_count": 8,
+                },
+            ),
+        ])
         session.commit()
 
     app = FastAPI()
@@ -142,6 +192,12 @@ def api_context() -> Iterator[dict]:
                 user_id=alice_id,
                 tenant_id=tenant_id,
                 external_subject="alice",
+            ),
+            "technology_kb_id": technology_kb_id,
+            "hr_kb_id": hr_kb_id,
+            "special_kb_id": special_kb_id,
+            "technology_document_id": (
+                technology_document_id
             ),
         }
 
@@ -198,3 +254,95 @@ def test_lists_only_accessible_knowledge_bases(
     }
 
     assert "人力资源部知识库" not in permissions
+
+
+def test_lists_documents_only_in_requested_knowledge_base(
+    api_context: dict,
+) -> None:
+    app = api_context["app"]
+    app.dependency_overrides[
+        get_current_principal
+    ] = lambda: api_context["principal"]
+
+    try:
+        client = TestClient(app)
+
+        response = client.get(
+            "/api/knowledge-bases/"
+            f"{api_context['technology_kb_id']}"
+            "/documents"
+        )
+
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+
+    items = response.json()["items"]
+    assert len(items) == 1
+
+    document = items[0]
+
+    assert document["id"] == str(
+        api_context["technology_document_id"]
+    )
+    assert document["file_name"] == "技术手册.docx"
+    assert document["status"] == "ready"
+    assert document["version"] == 1
+    assert document["chunk_count"] == 15
+    assert document["created_at"]
+    assert document["updated_at"]
+    assert "storage_uri" not in document
+    assert "content_hash" not in document
+
+
+def test_lists_empty_documents_for_accessible_knowledge_base(
+    api_context: dict,
+) -> None:
+    app = api_context["app"]
+    app.dependency_overrides[
+        get_current_principal
+    ] = lambda: api_context["principal"]
+
+    try:
+        client = TestClient(app)
+
+        response = client.get(
+            "/api/knowledge-bases/"
+            f"{api_context['special_kb_id']}"
+            "/documents"
+        )
+
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [],
+    }
+
+
+def test_rejects_document_list_for_unauthorized_kb(
+    api_context: dict,
+) -> None:
+    app = api_context["app"]
+    app.dependency_overrides[
+        get_current_principal
+    ] = lambda: api_context["principal"]
+
+    try:
+        client = TestClient(app)
+
+        response = client.get(
+            "/api/knowledge-bases/"
+            f"{api_context['hr_kb_id']}"
+            "/documents"
+        )
+
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "没有权限访问该知识库。",
+    }

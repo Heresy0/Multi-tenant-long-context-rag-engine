@@ -44,6 +44,7 @@ async def lifespan(app: FastAPI):
     """初始化应用服务，并在关闭时释放数据库连接。"""
     with ExitStack() as stack:
         settings = Settings()
+        app.state.settings = settings
 
         configure_application_logging(
             settings.log_level
