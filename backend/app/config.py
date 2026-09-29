@@ -17,6 +17,16 @@ def required_env(name: str) -> str:
 
 class Settings:
     def __init__(self):
+        self.log_level = (
+            os.getenv("LOG_LEVEL", "INFO").strip().upper()
+            or "INFO"
+        )
+        self.database_url = required_env("DATABASE_URL")
+
+        self.oidc_issuer = required_env("OIDC_ISSUER").rstrip("/")
+        self.oidc_audience = required_env("OIDC_AUDIENCE")
+        self.oidc_jwks_url = required_env("OIDC_JWKS_URL")
+
         self.chat_model = required_env("DASHSCOPE_MODEL")
         self.chat_base_url = required_env("DASHSCOPE_BASE_URL")
         self.chat_api_key = required_env("DASHSCOPE_API_KEY")
@@ -32,7 +42,6 @@ class Settings:
         self.oss_bucket = required_env("OSS_BUCKET")
 
         self.embedding_model = required_env("DASHSCOPE_EMBEDDING_MODEL")
-        self.chroma_directory = PROJECT_ROOT / "data" / "chroma"
         # 使用新文件，避免和正在运行的命令行脚本共用数据库
         self.database_path = PROJECT_ROOT / "weather_api.sqlite"
 

@@ -1,16 +1,27 @@
 import json
 from pathlib import Path
+from uuid import UUID
 
+import pytest
 import requests
 
 from scripts.evaluate_answers import (
+    ACCESS_TOKEN_ENV,
     evaluate_case,
+    filter_cases,
+    load_access_token,
     load_dataset,
     normalize,
     percentile,
     source_name,
     summarize,
 )
+
+
+KNOWLEDGE_BASE_ID = UUID(
+    "00000000-0000-0000-0000-000000000001"
+)
+ACCESS_TOKEN = "header.payload.signature"
 
 
 class FakeResponse:
@@ -53,6 +64,22 @@ def test_normalization_and_source_name() -> None:
     assert source_name("/data/policy.docx") == (
         "policy.docx"
     )
+    assert source_name(
+        "file:///D:/docs/06_%E5%BC%80%E6%94%BE"
+        "%E5%B9%B3%E5%8F%B0.docx"
+    ) == "06_开放平台.docx"
+
+
+def test_access_token_is_loaded_only_from_environment() -> None:
+    assert load_access_token({
+        ACCESS_TOKEN_ENV: f" Bearer {ACCESS_TOKEN} ",
+    }) == ACCESS_TOKEN
+
+    with pytest.raises(
+        ValueError,
+        match=ACCESS_TOKEN_ENV,
+    ):
+        load_access_token({})
 
 
 def test_load_dataset_validates_answer_fields(
@@ -73,17 +100,37 @@ def test_load_dataset_validates_answer_fields(
     assert cases == [make_case()]
 
 
+def test_filters_cases_for_one_knowledge_base() -> None:
+    cases = [
+        {"id": "technical-1", "category": "technical"},
+        {"id": "hr-1", "category": "hr"},
+        {"id": "unanswerable-1", "category": "unanswerable"},
+    ]
+
+    selected = filter_cases(
+        cases,
+        ["technical", "unanswerable"],
+    )
+
+    assert [case["id"] for case in selected] == [
+        "technical-1",
+        "unanswerable-1",
+    ]
+
+
 def test_evaluate_case_scores_facts_and_citation_source() -> None:
     calls: list[dict] = []
 
     def fake_post(
         endpoint: str,
         *,
+        headers: dict,
         json: dict,
         timeout: float,
     ) -> FakeResponse:
         calls.append({
             "endpoint": endpoint,
+            "headers": headers,
             "json": json,
             "timeout": timeout,
         })
@@ -112,13 +159,19 @@ def test_evaluate_case_scores_facts_and_citation_source() -> None:
     result = evaluate_case(
         "http://localhost/api/qa",
         make_case(),
+        knowledge_base_id=KNOWLEDGE_BASE_ID,
+        access_token=ACCESS_TOKEN,
         timeout_seconds=30,
         post=fake_post,
     )
 
     assert calls == [{
         "endpoint": "http://localhost/api/qa",
+        "headers": {
+            "Authorization": f"Bearer {ACCESS_TOKEN}",
+        },
         "json": {
+            "knowledge_base_id": str(KNOWLEDGE_BASE_ID),
             "question": "可用性为99.2%时抵扣多少？"
         },
         "timeout": 30,
@@ -137,6 +190,7 @@ def test_evaluate_case_scores_facts_and_citation_source() -> None:
     assert result["citation_source_hit"] is True
     assert result["timings"]["rerank_ms"] == 800.25
     assert result["timings"]["generation_ms"] == 9000.0
+    assert ACCESS_TOKEN not in json.dumps(result)
 
 
 def test_evaluate_case_records_request_error() -> None:
@@ -146,6 +200,8 @@ def test_evaluate_case_records_request_error() -> None:
     result = evaluate_case(
         "http://localhost/api/qa",
         make_case(),
+        knowledge_base_id=KNOWLEDGE_BASE_ID,
+        access_token=ACCESS_TOKEN,
         timeout_seconds=1,
         post=failing_post,
     )

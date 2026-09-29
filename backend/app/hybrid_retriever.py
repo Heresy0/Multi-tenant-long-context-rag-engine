@@ -4,7 +4,6 @@ import re
 import unicodedata
 
 import jieba
-from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
@@ -154,59 +153,20 @@ class HybridRetriever(BaseRetriever):
         return results
 
 def create_hybrid_retriever(
-        vector_store: Chroma,
         *,
+        vector_retriever: BaseRetriever,
+        keyword_documents: list[Document],
         k: int = 8,
         fetch_k: int = 30,
 ) -> BaseRetriever:
-    """从Chroma中的现有分块建立混合检索器。"""
-    stored = vector_store.get(
-        include = [
-            "documents",
-            "metadatas",
-        ]
-    )
-
-    ids = stored.get("ids") or []
-    texts = stored.get("documents") or []
-    metadatas = stored.get("metadatas") or []
-
-    documents: list[Document] = []
-
-    for chunk_id,text,metadata in zip(
-        ids,
-        texts,
-        metadatas,
-    ):
-        if not text:
-            continue
-
-        chunk_metadata = dict(metadata or {})
-        chunk_metadata["chunk_id"] = chunk_id
-
-        documents.append(
-            Document(
-                id=chunk_id,
-                page_content=text,
-                metadata=chunk_metadata,
-            )
-        )
-
-    if not documents:
+    """从通用向量检索器和关键词语料建立混合检索器。"""
+    if not keyword_documents:
         raise RuntimeError(
             "知识库为空，无法创建BM25检索器。"
         )
 
-    vector_retriever = vector_store.as_retriever(
-        search_type="mmr",
-        search_kwargs={
-            "k": fetch_k,
-            "fetch_k": max(fetch_k * 2, 60),
-        },
-    )
-
     keyword_retriever = BM25Retriever.from_documents(
-        documents,
+        keyword_documents,
         preprocess_func=tokenize_chinese,
         k=fetch_k,
     )

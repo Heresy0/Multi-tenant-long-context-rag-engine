@@ -51,33 +51,54 @@ evals/
 
 答案评估不应只计算字符串完全匹配。建议至少报告：回答判断准确率、关键事实覆盖率、引用来源准确率、无答案拒绝率、错误接受率和端到端延迟。
 
+`required_facts` 应拆分为可以独立匹配的原子事实。例如，把“按 event_id 去重”标注为 `event_id` 和“去重”，避免正确答案仅因词序不同而被误判。
+
 ### 运行答案评估
 
-先启动 FastAPI 服务，再从项目根目录运行开发集：
+先启动 FastAPI 服务，并把当前用户的访问令牌放入环境变量。令牌不会写入报告：
+
+```powershell
+$env:ENTERPRISE_KB_ACCESS_TOKEN = $token
+```
+
+一次评估固定在一个知识库授权范围内。技术部知识库首次运行可以只执行 1 条技术类问题进行冒烟测试：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\evaluate_answers.py `
   --dataset evals\datasets\answer_dev.jsonl `
-  --endpoint http://127.0.0.1:8000/api/qa `
+  --knowledge-base-id "8e4af664-22c1-480e-9393-36ac401da0f5" `
+  --category technical `
+  --limit 1 `
+  --output evals\reports\answer_dev_technical_smoke.json
+```
+
+冒烟测试通过后可以运行该知识库全部技术类开发题：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\evaluate_answers.py `
+  --dataset evals\datasets\answer_dev.jsonl `
+  --knowledge-base-id "8e4af664-22c1-480e-9393-36ac401da0f5" `
+  --category technical `
+  --category unanswerable `
   --timeout 120 `
-  --output evals\reports\answer_dev_v1.json
+  --output evals\reports\answer_dev_technical_v1.json
 ```
 
-首次运行可以只执行前 3 条进行冒烟测试：
-
-```powershell
-.\.venv\Scripts\python.exe scripts\evaluate_answers.py `
-  --dataset evals\datasets\answer_dev.jsonl `
-  --limit 3
-```
-
-开发策略和评分规则稳定后，才能运行独立测试集：
+开发策略和评分规则稳定后，再运行相同分类的独立测试集：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\evaluate_answers.py `
   --dataset evals\datasets\answer_test.jsonl `
-  --output evals\reports\answer_test_v1.json
+  --knowledge-base-id "8e4af664-22c1-480e-9393-36ac401da0f5" `
+  --category technical `
+  --category unanswerable `
+  --timeout 120 `
+  --output evals\reports\answer_test_technical_v1.json
+
+Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 ```
+
+`--category` 可以重复使用，但所有选中题目都必须属于本次指定知识库能够访问的语料。当前 Keycloak 访问令牌有效期较短，长评估应按知识库和分类分批执行并在每批开始前更新令牌。
 
 答案报告包括：
 
@@ -96,29 +117,31 @@ evals/
 
 关键事实覆盖使用 NFKC 归一化后的短语匹配，适合作为可重复的自动基线，但不等同于语义正确性或忠实度。复杂改写和跨句推理仍需人工抽检或单独的评审模型。
 
-## 运行方式
+## pgvector 答案层独立测试结果
 
-在项目根目录执行：
+2026-09-29 在技术部知识库上运行 `answer_test.jsonl` 的 3 条技术题和 8 条无答案题。11 次请求全部成功，可回答问题全部接受，无答案问题全部拒绝，且引用均命中预期技术手册。
 
-```powershell
-.\.venv\Scripts\python.exe scripts\inspect_retrieval.py `
-  --dataset evals\datasets\retrieval_dev.jsonl `
-  --k 8 `
-  --fetch-k 20 `
-  --answerability-threshold 0.70 `
-  --output evals\reports\retrieval_rerank_v2.json
-```
+| 指标 | 结果 |
+|---|---:|
+| 请求成功率 | 11/11（100%） |
+| 回答判断准确率 | 100% |
+| 可回答接受率 | 100% |
+| 无答案拒绝率 | 100% |
+| 引用来源准确率 / 召回率 | 100% / 100% |
+| 自动短语事实覆盖率 | 92.86% |
+| 人工复核事实覆盖率 | 100% |
+| 平均服务端总耗时 | 8516.80ms |
+| P95 服务端总耗时 | 13478.56ms |
 
-独立测试集：
+自动评分唯一未命中的事实来自 `ans-test-tech-003`：参考短语为“不得超过5分钟”，实际答案为“超过5分钟的请求应被拒绝，即允许最多相差5分钟”。两者语义一致，属于精确短语匹配的假阴性，而不是检索或回答错误。人工复核后，3 条可回答问题均完整覆盖关键事实。数据集已将该项改为原子事实“5分钟”，后续重复评估不会再受否定句式变化影响。
 
-```powershell
-.\.venv\Scripts\python.exe scripts\inspect_retrieval.py `
-  --dataset evals\datasets\retrieval_test.jsonl `
-  --k 8 `
-  --fetch-k 30 `
-  --answerability-threshold 0.70 `
-  --output evals\reports\retrieval_test_rerank_fetch30_v1.json
-```
+延迟主要来自答案生成：平均生成耗时 7402.71ms，占平均服务端总耗时约 86.9%；检索与重排序合计平均 1113.87ms。因此后续性能优化应优先关注生成模型和输出长度，而不是降低 pgvector 召回候选数。
+
+原始报告：[技术部知识库独立答案测试](reports/answer_test_technical_v1.json)。
+
+## 历史检索实验
+
+以下检索报告来自切换 pgvector 之前的 Chroma 基线实验，仅用于保存算法演进记录。旧的 `scripts/inspect_retrieval.py` 已随 Chroma 正式链路删除，不能再用这些命令运行当前系统。当前 pgvector 链路应通过受保护的 `/api/qa` 和上述答案评估脚本进行测量。
 
 主要指标：
 

@@ -7,6 +7,7 @@ from pydantic import Field
 
 from backend.app.hybrid_retriever import (
     HybridRetriever,
+    create_hybrid_retriever,
     document_key,
     tokenize_chinese,
 )
@@ -121,3 +122,28 @@ def test_vector_weight_is_used() -> None:
     results = retriever.invoke("测试问题")
 
     assert document_key(results[0]) == "source-1:a"
+
+
+def test_factory_accepts_storage_independent_inputs() -> None:
+    documents = [
+        make_document("a"),
+        make_document("b"),
+    ]
+    vector_retriever = StaticRetriever(
+        documents=documents,
+    )
+
+    retriever = create_hybrid_retriever(
+        vector_retriever=vector_retriever,
+        keyword_documents=documents,
+        k=1,
+        fetch_k=2,
+    )
+
+    assert isinstance(retriever, HybridRetriever)
+    assert retriever.vector_retriever is vector_retriever
+    assert retriever.search_kwargs == {
+        "k": 1,
+        "fetch_k": 2,
+    }
+    assert retriever.keyword_retriever.k == 2

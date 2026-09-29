@@ -1,5 +1,8 @@
+from uuid import UUID
 from pydantic import BaseModel, Field
 from .answer_models import AnswerResult
+
+
 
 class ChatRequest(BaseModel):
     message: str = Field(
@@ -15,6 +18,7 @@ class ChatResponse(BaseModel):
 
 
 class KnowledgeQuestionRequest(BaseModel):
+    knowledge_base_id: UUID
     question: str = Field(
         min_length=1,
         max_length=1000,
@@ -23,3 +27,14 @@ class KnowledgeQuestionRequest(BaseModel):
 
 class KnowledgeQuestionResponse(AnswerResult):
     pass
+
+
+class KnowledgeBaseSummary(BaseModel):
+    id: UUID
+    name: str
+    visibility: str
+    permission: str
+
+
+class KnowledgeBaseListResponse(BaseModel):
+    items: list[KnowledgeBaseSummary]
