@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from langchain_core.documents import Document
 from langchain_core.messages import (
@@ -89,6 +89,9 @@ def make_document(
         metadata={
             "source": f"C:/docs/{name}.docx",
             "source_id": f"source-{chunk_id}",
+            "document_id": str(
+                uuid5(NAMESPACE_URL, chunk_id)
+            ),
             "document_name": name,
             "section_path": section,
             "chunk_content_hash": f"hash-{chunk_id}",
@@ -314,6 +317,10 @@ def test_valid_claims_render_answer_and_citation_metadata(
         for citation in result.citations
     ] == ["资料1", "资料2"]
     assert result.citations[0].chunk_id == "chunk-sla"
+    assert result.citations[0].document_id == uuid5(
+        NAMESPACE_URL,
+        "chunk-sla",
+    )
     assert result.citations[1].document_name == "人事制度"
     assert result.citations[1].section_path == "生效日期"
     assert result.refusal_reason is None

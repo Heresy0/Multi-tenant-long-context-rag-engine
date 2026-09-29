@@ -201,8 +201,17 @@ def validate_response(data) -> dict:
     for citation in citations:
         if not isinstance(citation, dict):
             raise ValueError("citation 必须是 JSON 对象")
-        if not isinstance(citation.get("source"), str):
-            raise ValueError("citation 缺少 source 字符串")
+        if not isinstance(
+            citation.get("document_name"),
+            str,
+        ):
+            raise ValueError(
+                "citation 缺少 document_name 字符串"
+            )
+        if "source" in citation:
+            raise ValueError(
+                "citation 不应暴露内部 source"
+            )
 
     refusal_reason = data.get("refusal_reason")
     if refusal_reason is not None and not isinstance(
@@ -302,7 +311,7 @@ def evaluate_case(
         for evidence in case["expected_evidence"]
     })
     cited_documents = sorted({
-        source_name(citation["source"])
+        source_name(citation["document_name"])
         for citation in data["citations"]
     })
     expected_document_set = set(expected_documents)

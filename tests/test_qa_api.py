@@ -187,9 +187,11 @@ def test_qa_returns_answer_with_citations(
             citations=[
                 Citation(
                     citation_id="资料1",
+                    document_id=(
+                        "00000000-0000-0000-0000-000000000001"
+                    ),
                     document_name="服务等级协议",
                     section_path="服务抵扣",
-                    source="C:/docs/sla.docx",
                     chunk_id="chunk-1",
                 )
             ],
@@ -227,9 +229,11 @@ def test_qa_returns_answer_with_citations(
         "citations": [
             {
                 "citation_id": "资料1",
+                "document_id": (
+                    "00000000-0000-0000-0000-000000000001"
+                ),
                 "document_name": "服务等级协议",
                 "section_path": "服务抵扣",
-                "source": "C:/docs/sla.docx",
                 "chunk_id": "chunk-1",
             }
         ],

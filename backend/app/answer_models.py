@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 
@@ -30,9 +32,9 @@ class AnswerDraft(BaseModel):
 
 class Citation(BaseModel):
     citation_id: str
+    document_id: UUID | None = None
     document_name: str
     section_path: str
-    source: str
     chunk_id: str | None = None
 
 

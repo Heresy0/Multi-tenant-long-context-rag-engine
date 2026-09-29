@@ -17,6 +17,7 @@ def make_context(*contents: str) -> BuiltContext:
             citation_id=f"资料{index}",
             content=content,
             source=f"C:/docs/document-{index}.docx",
+            document_id=None,
             document_name=f"文档{index}",
             section_path="测试章节",
             chunk_id=f"chunk-{index}",

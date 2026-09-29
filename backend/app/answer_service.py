@@ -293,9 +293,9 @@ class AnswerService:
             citations.append(
                 Citation(
                     citation_id=item.citation_id,
+                    document_id=item.document_id,
                     document_name=item.document_name,
                     section_path=item.section_path,
-                    source=item.source,
                     chunk_id=item.chunk_id,
                 )
             )
