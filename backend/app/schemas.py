@@ -54,3 +54,9 @@ class KnowledgeDocumentSummary(BaseModel):
 
 class KnowledgeDocumentListResponse(BaseModel):
     items: list[KnowledgeDocumentSummary]
+
+
+class KnowledgeDocumentUploadResponse(BaseModel):
+    document: KnowledgeDocumentSummary
+    indexed_chunk_count: int
+    skipped: bool
