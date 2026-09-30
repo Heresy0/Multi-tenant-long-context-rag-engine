@@ -415,3 +415,63 @@ def test_does_not_read_or_create_job_across_knowledge_bases(
         job_id=job.id,
     )
     assert stored.status == "queued"
+
+
+def test_recovers_stale_running_jobs_and_preserves_cleanup_attempt(
+    session: Session,
+    scenario: Scenario,
+) -> None:
+    service = DocumentIndexingJobService(
+        session=session
+    )
+    retryable = _create_job(
+        service,
+        scenario,
+        max_attempts=3,
+    )
+    terminal = _create_job(
+        service,
+        scenario,
+        scope=scenario.other_scope,
+        document_id=scenario.other_document_id,
+        marker="f",
+        max_attempts=1,
+    )
+    stale_time = (
+        datetime.now(timezone.utc)
+        - timedelta(minutes=10)
+    )
+
+    retryable.status = "running"
+    retryable.attempt_count = 1
+    retryable.started_at = stale_time
+    terminal.status = "running"
+    terminal.attempt_count = 1
+    terminal.started_at = stale_time
+    session.commit()
+
+    recovered_count = (
+        service.recover_stale_running_jobs(
+            stale_after_seconds=60,
+        )
+    )
+
+    session.expire_all()
+    stored_retryable = session.get(
+        DocumentIndexingJob,
+        retryable.id,
+    )
+    stored_terminal = session.get(
+        DocumentIndexingJob,
+        terminal.id,
+    )
+
+    assert recovered_count == 2
+    assert stored_retryable is not None
+    assert stored_retryable.status == "queued"
+    assert stored_retryable.started_at is None
+    assert stored_terminal is not None
+    assert stored_terminal.status == "queued"
+    assert stored_terminal.attempt_count == 0
+    assert stored_terminal.finished_at is None
+    assert "超过运行时限" in stored_terminal.last_error

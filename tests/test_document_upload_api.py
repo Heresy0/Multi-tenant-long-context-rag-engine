@@ -163,6 +163,17 @@ def _upload_url(context: UploadApiContext) -> str:
     )
 
 
+def _job_url(
+    context: UploadApiContext,
+    job_id: str,
+) -> str:
+    return (
+        "/api/knowledge-bases/"
+        f"{context.knowledge_base_id}/"
+        f"indexing-jobs/{job_id}"
+    )
+
+
 def _staged_files(
     context: UploadApiContext,
 ) -> list[Path]:
@@ -359,3 +370,53 @@ def test_second_active_upload_returns_conflict(
 
     assert document_count == 1
     assert job_count == 1
+
+
+def test_editor_can_query_job_but_viewer_cannot(
+    api_context: UploadApiContext,
+) -> None:
+    client = TestClient(api_context.app)
+    _set_principal(api_context, api_context.editor)
+    upload_response = client.post(
+        _upload_url(api_context),
+        files={
+            "file": (
+                "任务状态.txt",
+                b"content",
+                "text/plain",
+            ),
+        },
+    )
+    job_id = upload_response.json()[
+        "indexing_job"
+    ]["id"]
+
+    response = client.get(
+        _job_url(api_context, job_id)
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == job_id
+    assert payload["status"] == "queued"
+    assert payload["indexed_chunk_count"] is None
+    assert payload["last_error"] is None
+    assert payload["started_at"] is None
+    assert payload["finished_at"] is None
+
+    _set_principal(api_context, api_context.viewer)
+    forbidden = client.get(
+        _job_url(api_context, job_id)
+    )
+
+    assert forbidden.status_code == 403
+
+    _set_principal(api_context, api_context.editor)
+    missing = client.get(
+        _job_url(api_context, str(uuid4()))
+    )
+
+    assert missing.status_code == 404
+    assert missing.json() == {
+        "detail": "索引任务不存在。",
+    }

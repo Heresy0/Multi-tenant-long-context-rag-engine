@@ -68,6 +68,27 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  worker:
+    build:
+      context: .
+    container_name: enterprise-knowledge-worker
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DOCUMENT_STORAGE_DIR: /app/data/documents
+    command:
+      - python
+      - scripts/run_indexing_worker.py
+    volumes:
+      - enterprise_document_data:/app/data/documents
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
 volumes:
   enterprise_postgres_data:
   keycloak_data:

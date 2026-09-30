@@ -336,6 +336,63 @@ class DocumentIndexingJobService:
 
         return job
 
+    def recover_stale_running_jobs(
+        self,
+        *,
+        stale_after_seconds: float,
+    ) -> int:
+        """重新排队或终止超过运行时限的任务。"""
+        if stale_after_seconds < 0:
+            raise ValueError(
+                "stale_after_seconds 不能小于 0"
+            )
+
+        now = self._now()
+        stale_before = now - timedelta(
+            seconds=stale_after_seconds
+        )
+
+        try:
+            jobs = self._session.scalars(
+                select(DocumentIndexingJob)
+                .where(
+                    DocumentIndexingJob.status
+                    == "running",
+                    DocumentIndexingJob.started_at
+                    <= stale_before,
+                )
+                .order_by(
+                    DocumentIndexingJob.started_at,
+                    DocumentIndexingJob.id,
+                )
+                .with_for_update(skip_locked=True)
+            ).all()
+
+            for job in jobs:
+                job.last_error = (
+                    "索引 Worker 超过运行时限，任务已恢复。"
+                )
+                job.indexed_chunk_count = None
+                job.status = "queued"
+                job.available_at = now
+                job.started_at = None
+                job.finished_at = None
+
+                # 进程中断没有机会执行文件恢复，因此最后一次
+                # claim 不能直接耗尽重试次数，要保留一次恢复执行。
+                if job.attempt_count >= job.max_attempts:
+                    job.attempt_count = max(
+                        job.max_attempts - 1,
+                        0,
+                    )
+
+            self._session.commit()
+            return len(jobs)
+
+        except Exception:
+            self._session.rollback()
+            raise
+
     def _get_locked(
         self,
         *,

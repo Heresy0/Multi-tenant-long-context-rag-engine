@@ -20,6 +20,7 @@ from ..schemas import (
     KnowledgeDocumentListResponse,
     KnowledgeDocumentSummary,
     KnowledgeDocumentUploadResponse,
+    DocumentIndexingJobDetail,
     DocumentIndexingJobSummary,
 )
 from ..security.authorization import (
@@ -39,6 +40,8 @@ from ..document_upload_service import (
 )
 from ..document_indexing_job_service import (
     ActiveDocumentIndexingJobExists,
+    DocumentIndexingJobNotFound,
+    DocumentIndexingJobService,
 )
 from ..security.retrieval_scope import RetrievalScope
 
@@ -301,6 +304,74 @@ def upload_knowledge_base_document(
             created_at=indexing_job.created_at,
             updated_at=indexing_job.updated_at,
         ),
+    )
+
+
+@router.get(
+    "/{knowledge_base_id}/indexing-jobs/{job_id}",
+    response_model=DocumentIndexingJobDetail,
+)
+def get_document_indexing_job(
+    knowledge_base_id: UUID,
+    job_id: UUID,
+    principal: Principal = Depends(
+        get_current_principal
+    ),
+    session: Session = Depends(
+        get_database_session
+    ),
+) -> DocumentIndexingJobDetail:
+    """查询当前知识库中的文档索引任务。"""
+    authorization = AuthorizationService(session)
+
+    try:
+        authorization.require_permission(
+            principal=principal,
+            knowledge_base_id=knowledge_base_id,
+            required_permission="editor",
+        )
+
+    except AuthorizationDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    scope = RetrievalScope(
+        tenant_id=principal.tenant_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+
+    try:
+        job = DocumentIndexingJobService(
+            session=session
+        ).get(
+            scope=scope,
+            job_id=job_id,
+        )
+
+    except DocumentIndexingJobNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return DocumentIndexingJobDetail(
+        id=job.id,
+        document_id=job.document_id,
+        status=job.status,
+        target_version=job.target_version,
+        attempt_count=job.attempt_count,
+        max_attempts=job.max_attempts,
+        indexed_chunk_count=(
+            job.indexed_chunk_count
+        ),
+        last_error=job.last_error,
+        available_at=job.available_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
     )
 
 

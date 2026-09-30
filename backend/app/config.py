@@ -67,3 +67,37 @@ class Settings:
             raise RuntimeError(
                 "MAX_UPLOAD_BYTES 必须是正整数"
             )
+
+        self.indexing_worker_poll_seconds = float(
+            os.getenv(
+                "INDEXING_WORKER_POLL_SECONDS",
+                "2",
+            )
+        )
+        self.indexing_job_retry_delay_seconds = float(
+            os.getenv(
+                "INDEXING_JOB_RETRY_DELAY_SECONDS",
+                "30",
+            )
+        )
+        self.indexing_job_stale_after_seconds = float(
+            os.getenv(
+                "INDEXING_JOB_STALE_AFTER_SECONDS",
+                "300",
+            )
+        )
+
+        if self.indexing_worker_poll_seconds <= 0:
+            raise RuntimeError(
+                "INDEXING_WORKER_POLL_SECONDS 必须大于 0"
+            )
+
+        if self.indexing_job_retry_delay_seconds < 0:
+            raise RuntimeError(
+                "INDEXING_JOB_RETRY_DELAY_SECONDS 不能小于 0"
+            )
+
+        if self.indexing_job_stale_after_seconds <= 0:
+            raise RuntimeError(
+                "INDEXING_JOB_STALE_AFTER_SECONDS 必须大于 0"
+            )

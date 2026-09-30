@@ -66,6 +66,17 @@ class DocumentIndexingJobSummary(BaseModel):
     updated_at: datetime
 
 
+class DocumentIndexingJobDetail(
+    DocumentIndexingJobSummary
+):
+    document_id: UUID
+    indexed_chunk_count: int | None
+    last_error: str | None
+    available_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
 class KnowledgeDocumentUploadResponse(BaseModel):
     document: KnowledgeDocumentSummary
     indexing_job: DocumentIndexingJobSummary
