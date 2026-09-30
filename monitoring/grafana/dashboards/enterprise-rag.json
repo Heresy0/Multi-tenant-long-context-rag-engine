@@ -75,6 +75,39 @@
       "targets": [{"expr": "sum by (route, status) (rate(enterprise_http_requests_total{job=\"enterprise-knowledge-api\"}[5m]))", "legendFormat": "{{route}} / {{status}}", "refId": "A"}],
       "title": "HTTP 请求速率",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 22},
+      "id": 8,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"expr": "sum(ALERTS{alertstate=\"firing\"}) or vector(0)", "legendFormat": "触发中", "refId": "A"}],
+      "title": "当前触发告警",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 6, "w": 9, "x": 6, "y": 22},
+      "id": 9,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "none"}},
+      "targets": [
+        {"expr": "sum(rate(alertmanager_notifications_total{job=\"enterprise-knowledge-alertmanager\"}[5m]))", "legendFormat": "通知", "refId": "A"},
+        {"expr": "sum(rate(alertmanager_notifications_failed_total{job=\"enterprise-knowledge-alertmanager\"}[5m]))", "legendFormat": "失败", "refId": "B"}
+      ],
+      "title": "Alertmanager 通知速率",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 6, "w": 9, "x": 15, "y": 22},
+      "id": 10,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "none"}},
+      "targets": [{"expr": "sum by (outcome) (rate(enterprise_alert_webhook_deliveries_total{job=\"enterprise-knowledge-alert-webhook\"}[5m]))", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "title": "Webhook 网关处理速率",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -86,5 +119,5 @@
   "timezone": "browser",
   "title": "Enterprise Knowledge RAG",
   "uid": "enterprise-knowledge-rag",
-  "version": 1
+  "version": 2
 }

@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     text,
 )
+from sqlalchemy import event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -761,6 +762,112 @@ class IndexingWorkerHeartbeat(TimestampMixin, Base):
             "last_heartbeat_at",
         ),
     )
+
+
+class AuditEvent(Base):
+    """仅追加的安全审计事件。"""
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+    )
+    knowledge_base_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+    )
+    action: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+    resource_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    resource_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    outcome: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+    request_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    details_json: Mapped[dict[str, object]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('success', 'denied', 'invalid', 'failed')",
+            name="ck_audit_events_outcome",
+        ),
+        Index(
+            "ix_audit_events_tenant_occurred",
+            "tenant_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_audit_events_actor_occurred",
+            "tenant_id",
+            "actor_user_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_audit_events_kb_occurred",
+            "tenant_id",
+            "knowledge_base_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_audit_events_action_occurred",
+            "tenant_id",
+            "action",
+            "occurred_at",
+        ),
+    )
+
+
+def _reject_audit_event_mutation(
+    _mapper,
+    _connection,
+    _target: AuditEvent,
+) -> None:
+    raise ValueError(
+        "审计事件是不可变记录，禁止更新或删除。"
+    )
+
+
+event.listen(
+    AuditEvent,
+    "before_update",
+    _reject_audit_event_mutation,
+)
+event.listen(
+    AuditEvent,
+    "before_delete",
+    _reject_audit_event_mutation,
+)
 
 
 class DocumentChunk(TimestampMixin, Base):

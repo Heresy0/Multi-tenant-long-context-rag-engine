@@ -11,6 +11,10 @@ from .db.models import (
     DocumentIndexingJob,
     KnowledgeDocument,
 )
+from .audit_service import (
+    AuditService,
+    log_committed_audit_event,
+)
 from .document_indexing_job_service import (
     DocumentIndexingJobService,
 )
@@ -60,6 +64,7 @@ class DocumentUploadService:
         source: BinaryIO,
         scope: RetrievalScope,
         created_by_user_id: UUID,
+        request_id: str | None = None,
     ) -> DocumentUploadResult:
         staged_document = self._staging_service.stage(
             file_name=file_name,
@@ -170,7 +175,32 @@ class DocumentUploadService:
                     staged_document.content_hash
                 ),
                 target_version=target_version,
+                commit=False,
             )
+            audit_event = AuditService(
+                self._session
+            ).add(
+                tenant_id=scope.tenant_id,
+                actor_user_id=created_by_user_id,
+                knowledge_base_id=(
+                    scope.knowledge_base_id
+                ),
+                action="document.upload_requested",
+                resource_type="document",
+                resource_id=document.id,
+                outcome="success",
+                request_id=request_id,
+                details={
+                    "indexing_job_id": str(
+                        indexing_job.id
+                    ),
+                    "target_version": target_version,
+                },
+            )
+            self._session.commit()
+            self._session.refresh(document)
+            self._session.refresh(indexing_job)
+            log_committed_audit_event(audit_event)
 
         except IntegrityError as exc:
             self._session.rollback()

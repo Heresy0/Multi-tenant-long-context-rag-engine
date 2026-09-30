@@ -19,8 +19,10 @@
 - 可回答性判断、资料引用和拒答机制
 - 文档列表、上传、更新及删除 API
 - 问答阶段耗时、请求 ID 和权限拒绝事件等结构化日志
+- Loki 集中日志、Grafana 日志检索和跨服务请求关联
+- 事务内审计事件、数据库级防篡改触发器和管理员查询 API
 - Worker 心跳、索引队列状态和分层健康检查
-- Prometheus 指标、告警规则和自动配置的 Grafana 看板
+- Prometheus 指标、Alertmanager 通知和自动配置的 Grafana 看板
 - 开发集、独立测试集和答案级离线评估脚本
 - Docker Compose 本地环境及 GitHub Actions 持续集成
 
@@ -43,8 +45,15 @@ flowchart LR
     W --> F
     W --> P
     A --> O[结构化日志与耗时指标]
+    A --> AU[(不可变审计事件)]
     O --> M[Prometheus]
+    O --> AL[Grafana Alloy]
+    AL --> LK[Loki]
+    LK --> G[Grafana]
     M --> G[Grafana]
+    M --> AM[Alertmanager]
+    AM --> AW[Webhook 通知网关]
+    AW -. 可选转发 .-> E[外部告警平台]
 ```
 
 一条问答请求的大致流程为：
@@ -68,7 +77,7 @@ flowchart LR
 | 文档处理 | PyPDF、python-docx、docx2txt |
 | 测试 | pytest、真实 PostgreSQL 集成测试 |
 | 工程化 | Docker Compose、GitHub Actions |
-| 可观测性 | JSON 日志、Prometheus、Grafana |
+| 可观测性 | JSON 日志、Grafana Alloy、Loki、Prometheus、Alertmanager、Grafana |
 
 ## 目录结构
 
@@ -85,7 +94,7 @@ flowchart LR
 │   ├── datasets/             # 开发集和独立测试集
 │   └── reports/              # 评估报告
 ├── sample_docs/              # 演示文档
-├── monitoring/               # Prometheus、告警与 Grafana 配置
+├── monitoring/               # Prometheus、Alertmanager、Alloy、Loki 与 Grafana 配置
 ├── compose.yaml              # 应用、依赖服务与监控栈
 ├── Dockerfile                # API 生产镜像入口
 └── requirements.txt
@@ -176,12 +185,16 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 - OpenAPI JSON：<http://127.0.0.1:8000/openapi.json>
 - Keycloak：<http://127.0.0.1:8080>
 - Prometheus：<http://127.0.0.1:9090>
+- Alertmanager：<http://127.0.0.1:9093>
+- 告警 Webhook 网关状态：<http://127.0.0.1:8090/status>
+- Loki 就绪状态：<http://127.0.0.1:3100/ready>
+- Alloy 组件状态：<http://127.0.0.1:12345>
 - Grafana：<http://127.0.0.1:3000>
 
-查看 API 和索引 Worker 日志：
+查看 API、索引 Worker 和告警通知日志：
 
 ```powershell
-docker compose logs -f api worker
+docker compose logs -f api worker alloy loki alertmanager alert-webhook
 ```
 
 健康检查地址：
@@ -194,7 +207,7 @@ Worker 默认每 10 秒写入一次心跳，30 秒没有新心跳即视为不可
 可以通过 `INDEXING_WORKER_HEARTBEAT_SECONDS` 和
 `INDEXING_WORKER_STALE_SECONDS` 调整，但失联阈值至少应为心跳间隔的两倍。
 
-### Prometheus 与 Grafana
+### Prometheus、Loki、Alertmanager 与 Grafana
 
 API 在 `/metrics` 导出 Prometheus 文本指标。指标标签只包含请求路由、
 状态和处理结果等低基数字段，不包含租户、用户、问题、文档或任务标识。
@@ -206,13 +219,81 @@ Prometheus 每 15 秒抓取一次 API，并加载以下告警：
 - 最近十分钟出现最终失败任务
 - QA P95 延迟持续超过十五秒
 
-Grafana 启动时会自动配置 Prometheus 数据源和
-`Enterprise Knowledge RAG` 看板。首次启动前应在 `.env` 中修改：
+Prometheus 把触发的告警发送给 Alertmanager。Alertmanager 负责分组、
+去重、抑制、重复通知和恢复通知，再发送到内部 Webhook 网关。严重告警
+等待 5 秒后发送，每 30 分钟重复一次；普通告警等待 10 秒后发送，默认
+每 4 小时重复一次。同名 `critical` 告警会抑制对应的 `warning` 告警。
+
+Webhook 网关默认进入本地接收模式，只输出结构化事件和低基数指标，
+不保存告警正文。需要转发到接受 Alertmanager JSON 的企业告警平台时，
+先创建只供网关读取的独立环境文件：
+
+```powershell
+Copy-Item .env.alerting.example .env.alerting
+```
+
+然后在 `.env.alerting` 中配置：
+
+```env
+ALERT_WEBHOOK_FORWARD_URL=https://alerts.example.com/hooks/your-id
+ALERT_WEBHOOK_AUTHORIZATION=Bearer your-token
+ALERT_WEBHOOK_TIMEOUT_SECONDS=10
+```
+
+`ALERT_WEBHOOK_AUTHORIZATION` 是可选项。不要把真实 URL、令牌或密码提交
+到 Git；它们只应保存在本地 `.env.alerting` 或部署平台的密钥管理服务中。外部
+端点返回非 2xx 或连接失败时，网关返回 502，让 Alertmanager 自动重试。
+
+Grafana 启动时会自动配置 Prometheus、Loki 两个数据源，以及
+`Enterprise Knowledge RAG`、`Enterprise Knowledge Logs & Audit` 两个看板。
+首次启动前应在 `.env` 中修改：
 
 ```env
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=<强密码>
 ```
+
+Alloy 通过只读 Docker Socket 发现本项目容器，把日志发送到 Loki。
+Loki 在本地保留 7 天日志；`service`、`container`、`environment` 等低基数
+字段作为标签，用户、租户、知识库和 `request_id` 不作为标签。需要按请求
+排障时，在 Grafana Explore 中使用：
+
+```logql
+{stack="enterprise-knowledge", service="api"}
+| json
+| request_id="<响应头中的 X-Request-ID>"
+```
+
+查看已经成功提交到数据库的审计事件：
+
+```logql
+{stack="enterprise-knowledge", service="api"}
+| json
+| event="audit.committed"
+```
+
+Loki 本身不负责业务审计的永久保存。权威记录存放在 PostgreSQL
+`audit_events` 表中；Loki 中的副本用于搜索、关联和排障。Loki 和 Alloy
+端口仅绑定 `127.0.0.1`。生产环境应把 Loki 放在私有网络或认证代理后，
+并使用受控的日志采集权限。
+
+### 不可变审计日志
+
+系统对以下安全敏感动作写入审计事件：
+
+- 文档上传并创建异步索引任务
+- 文档删除
+- 最终失败索引任务的人工重试
+- 问答访问成功、拒绝、参数无效或执行失败
+
+上传、删除和重试的审计事件与业务变更使用同一数据库事务。ORM 事件监听器
+阻止应用代码更新或删除审计记录，Alembic 迁移还会在 PostgreSQL 中创建
+`BEFORE UPDATE OR DELETE` 触发器，防止绕过 ORM 的直接 SQL 篡改。
+
+审计详情采用白名单式最小记录原则：只保存版本号、索引任务 ID、是否可回答、
+引用数量等必要字段，不保存 JWT、问题、答案、文档正文、本地路径或存储 URI。
+事件保留原始 `tenant_id`、`actor_user_id` 和资源 ID 快照，不使用指向业务表的
+级联外键，因此删除业务资源后审计证据仍然存在。
 
 常用指标包括：
 
@@ -226,11 +307,27 @@ enterprise_indexing_job_duration_seconds
 enterprise_indexing_workers_active
 enterprise_indexing_queue_jobs
 enterprise_indexing_oldest_queued_seconds
+enterprise_alert_webhook_deliveries_total
+enterprise_alert_webhook_alerts_total
+alertmanager_notifications_total
+alertmanager_notifications_failed_total
 ```
 
 API 指标由 `api:8000/metrics` 提供；索引执行计数和耗时由 Worker
 内部的 `worker:9101/metrics` 提供。Worker 指标端口只暴露在 Compose
 内部网络，不映射到宿主机。
+
+Alertmanager 和 Webhook 网关分别监听 `9093` 和 `8090`。本地端口只绑定
+到 `127.0.0.1`；生产部署时也应通过防火墙、反向代理或私有网络限制访问。
+
+可以随时执行一次不会污染业务数据的通知链路冒烟测试：
+
+```powershell
+python scripts/test_alert_pipeline.py
+```
+
+脚本会向本地 Alertmanager 注入一条临时严重告警，等待网关接收后输出
+`"status": "passed"`，并在退出前自动把该测试告警标记为已恢复。
 
 停止服务：
 
@@ -377,6 +474,7 @@ Authorization: Bearer <access_token>
 | `GET` | `/api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}` | editor | 查询文档索引任务状态 |
 | `POST` | `/api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}/retry` | editor | 人工重试最终失败任务 |
 | `DELETE` | `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}` | editor | 删除文档、分块和受管文件 |
+| `GET` | `/api/knowledge-bases/{knowledge_base_id}/audit-events` | admin | 查询租户隔离的知识库审计事件 |
 | `POST` | `/api/qa` | viewer | 在指定知识库范围内问答 |
 
 问答请求示例：
@@ -388,7 +486,10 @@ Authorization: Bearer <access_token>
 }
 ```
 
-成功响应包含答案、是否可回答、引用、拒答原因和各处理阶段耗时。响应头中的 `X-Request-ID` 可用于关联服务端结构化日志。
+成功响应包含答案、是否可回答、引用、拒答原因和各处理阶段耗时。响应头中的 `X-Request-ID` 可用于关联服务端结构化日志和审计事件。
+
+审计查询支持 `action`、`outcome`、`before` 和 `limit` 参数。接口同时强制
+校验当前租户、知识库和 `admin` 权限，普通 `viewer`、`editor` 不能读取。
 
 ## 测试
 
@@ -470,11 +571,11 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 
 项目目前适合本地开发、功能演示和技术方案验证，距离生产环境还需要继续补充：
 
-- 将同步文档解析和向量化改为异步任务队列
+- 将当前数据库任务队列扩展为可水平扩容的多 Worker 队列
 - 生产级对象存储和文件病毒扫描
 - Keycloak Realm 自动化配置和密钥管理
-- OpenTelemetry 分布式追踪、Alertmanager 通知和集中日志平台
-- API 限流、上传频率控制和审计后台
+- OpenTelemetry 分布式追踪和跨服务 Trace 上下文
+- API 限流、上传频率控制和可视化审计管理后台
 - 数据库备份、恢复演练和滚动迁移策略
 - 大规模文档下的关键词索引优化和压力测试
 - 前端知识库管理与问答界面

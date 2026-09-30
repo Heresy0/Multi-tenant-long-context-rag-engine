@@ -10,6 +10,10 @@ from .db.models import (
     DocumentIndexingJob,
     KnowledgeDocument,
 )
+from .audit_service import (
+    AuditService,
+    log_committed_audit_event,
+)
 from .security.retrieval_scope import RetrievalScope
 
 
@@ -72,6 +76,7 @@ class DocumentIndexingJobService:
         candidate_content_hash: str,
         target_version: int,
         max_attempts: int = 3,
+        commit: bool = True,
     ) -> DocumentIndexingJob:
         """为指定范围内的文档创建待执行任务。"""
         if target_version < 1:
@@ -168,8 +173,11 @@ class DocumentIndexingJobService:
                 available_at=self._now(),
             )
             self._session.add(job)
-            self._session.commit()
-            self._session.refresh(job)
+            if commit:
+                self._session.commit()
+                self._session.refresh(job)
+            else:
+                self._session.flush()
             return job
 
         except IntegrityError as exc:
@@ -398,6 +406,8 @@ class DocumentIndexingJobService:
             [DocumentIndexingJob],
             None,
         ] | None = None,
+        actor_user_id: UUID | None = None,
+        request_id: str | None = None,
     ) -> DocumentIndexingJob:
         """把仍然有效的最终失败任务重新加入队列。"""
         job = self._get_locked(
@@ -479,8 +489,31 @@ class DocumentIndexingJobService:
                 document.status = "pending"
                 document.last_error = None
 
+            audit_event = None
+            if actor_user_id is not None:
+                audit_event = AuditService(
+                    self._session
+                ).add(
+                    tenant_id=scope.tenant_id,
+                    actor_user_id=actor_user_id,
+                    knowledge_base_id=(
+                        scope.knowledge_base_id
+                    ),
+                    action="indexing_job.retry_requested",
+                    resource_type="indexing_job",
+                    resource_id=job.id,
+                    outcome="success",
+                    request_id=request_id,
+                    details={
+                        "document_id": str(job.document_id),
+                        "target_version": job.target_version,
+                    },
+                )
+
             self._session.commit()
             self._session.refresh(job)
+            if audit_event is not None:
+                log_committed_audit_event(audit_event)
             return job
 
         except IntegrityError as exc:

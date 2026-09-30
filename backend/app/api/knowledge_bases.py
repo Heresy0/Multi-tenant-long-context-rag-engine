@@ -11,7 +11,8 @@ from fastapi import (
     )
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from uuid import UUID
+from uuid import UUID, uuid4
+from datetime import datetime
 
 from ..db.dependencies import get_database_session
 from ..db.models import (
@@ -20,6 +21,8 @@ from ..db.models import (
     KnowledgeDocument,
 )
 from ..schemas import (
+    AuditEventListResponse,
+    AuditEventSummary,
     KnowledgeBaseListResponse,
     KnowledgeBaseSummary,
     KnowledgeDocumentListResponse,
@@ -29,6 +32,7 @@ from ..schemas import (
     DocumentIndexingJobListResponse,
     DocumentIndexingJobSummary,
 )
+from ..audit_service import AuditService
 from ..security.authorization import (
     AuthorizationService,
     AuthorizationDenied,
@@ -235,6 +239,7 @@ def list_knowledge_base_documents(
 def upload_knowledge_base_document(
     knowledge_base_id: UUID,
     request: Request,
+    response: Response,
     file: UploadFile = File(...),
     principal: Principal = Depends(
         get_current_principal
@@ -244,6 +249,8 @@ def upload_knowledge_base_document(
     ),
 ) -> KnowledgeDocumentUploadResponse:
     """暂存上传文件并创建异步索引任务。"""
+    request_id = uuid4().hex
+    response.headers["X-Request-ID"] = request_id
     authorization = AuthorizationService(session)
 
     try:
@@ -278,6 +285,7 @@ def upload_knowledge_base_document(
             source=file.file,
             scope=scope,
             created_by_user_id=principal.user_id,
+            request_id=request_id,
         )
 
     except UploadTooLarge as exc:
@@ -461,6 +469,7 @@ def retry_document_indexing_job(
     knowledge_base_id: UUID,
     job_id: UUID,
     request: Request,
+    response: Response,
     principal: Principal = Depends(
         get_current_principal
     ),
@@ -469,6 +478,8 @@ def retry_document_indexing_job(
     ),
 ) -> DocumentIndexingJobDetail:
     """把保留了候选文件的最终失败任务重新加入队列。"""
+    request_id = uuid4().hex
+    response.headers["X-Request-ID"] = request_id
     authorization = AuthorizationService(session)
 
     try:
@@ -523,6 +534,8 @@ def retry_document_indexing_job(
             scope=scope,
             job_id=job_id,
             candidate_validator=validate_candidate,
+            actor_user_id=principal.user_id,
+            request_id=request_id,
         )
     except DocumentIndexingJobNotFound as exc:
         raise HTTPException(
@@ -560,6 +573,7 @@ def delete_knowledge_base_document(
     ),
 ) -> Response:
     """删除指定知识库中的文档。"""
+    request_id = uuid4().hex
     authorization = AuthorizationService(session)
 
     try:
@@ -592,6 +606,8 @@ def delete_knowledge_base_document(
         deletion_service.delete(
             scope=scope,
             document_id=document_id,
+            actor_user_id=principal.user_id,
+            request_id=request_id,
         )
 
     except DocumentNotFoundError as exc:
@@ -609,5 +625,72 @@ def delete_knowledge_base_document(
         ) from exc
 
     return Response(
-        status_code=status.HTTP_204_NO_CONTENT
+        status_code=status.HTTP_204_NO_CONTENT,
+        headers={"X-Request-ID": request_id},
+    )
+
+
+@router.get(
+    "/{knowledge_base_id}/audit-events",
+    response_model=AuditEventListResponse,
+)
+def list_knowledge_base_audit_events(
+    knowledge_base_id: UUID,
+    action: str | None = None,
+    outcome: str | None = None,
+    before: datetime | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    principal: Principal = Depends(
+        get_current_principal
+    ),
+    session: Session = Depends(
+        get_database_session
+    ),
+) -> AuditEventListResponse:
+    """仅允许知识库管理员查询租户隔离的审计事件。"""
+    try:
+        AuthorizationService(session).require_permission(
+            principal=principal,
+            knowledge_base_id=knowledge_base_id,
+            required_permission="admin",
+        )
+    except AuthorizationDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        events = AuditService(
+            session
+        ).list_for_knowledge_base(
+            tenant_id=principal.tenant_id,
+            knowledge_base_id=knowledge_base_id,
+            action=action,
+            outcome=outcome,
+            before=before,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+    return AuditEventListResponse(
+        items=[
+            AuditEventSummary(
+                id=event.id,
+                actor_user_id=event.actor_user_id,
+                knowledge_base_id=event.knowledge_base_id,
+                action=event.action,
+                resource_type=event.resource_type,
+                resource_id=event.resource_id,
+                outcome=event.outcome,
+                request_id=event.request_id,
+                details=event.details_json,
+                occurred_at=event.occurred_at,
+            )
+            for event in events
+        ]
     )

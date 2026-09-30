@@ -84,3 +84,20 @@ class DocumentIndexingJobListResponse(BaseModel):
 class KnowledgeDocumentUploadResponse(BaseModel):
     document: KnowledgeDocumentSummary
     indexing_job: DocumentIndexingJobSummary
+
+
+class AuditEventSummary(BaseModel):
+    id: UUID
+    actor_user_id: UUID | None
+    knowledge_base_id: UUID | None
+    action: str
+    resource_type: str
+    resource_id: str | None
+    outcome: str
+    request_id: str | None
+    details: dict[str, object]
+    occurred_at: datetime
+
+
+class AuditEventListResponse(BaseModel):
+    items: list[AuditEventSummary]

@@ -13,6 +13,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from ..answer_service import AnswerService
+from ..audit_service import AuditService
 from ..db.dependencies import get_database_session
 from ..schemas import (
     KnowledgeQuestionRequest,
@@ -46,6 +47,12 @@ def get_answer_service(
     return request.app.state.answer_service
 
 
+def get_audit_service(
+    session: Session = Depends(get_database_session),
+) -> AuditService:
+    return AuditService(session)
+
+
 @router.post(
     "",
     response_model=KnowledgeQuestionResponse,
@@ -62,6 +69,9 @@ def answer_question(
     answer_service: AnswerService = Depends(
         get_answer_service
     ),
+    audit_service: AuditService = Depends(
+        get_audit_service
+    ),
 ) -> KnowledgeQuestionResponse:
     """在授权知识库范围内执行问答。"""
     request_id = uuid4().hex
@@ -76,6 +86,25 @@ def answer_question(
             payload.knowledge_base_id
         ),
     }
+
+    def commit_audit(
+        *,
+        outcome: str,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        audit_service.record(
+            tenant_id=principal.tenant_id,
+            actor_user_id=principal.user_id,
+            knowledge_base_id=(
+                payload.knowledge_base_id
+            ),
+            action="qa.queried",
+            resource_type="knowledge_base",
+            resource_id=payload.knowledge_base_id,
+            outcome=outcome,
+            request_id=request_id,
+            details=details,
+        )
 
     try:
         authorization = AuthorizationService(session)
@@ -93,6 +122,15 @@ def answer_question(
             payload.question,
             scope=scope,
             session=session,
+        )
+        commit_audit(
+            outcome="success",
+            details={
+                "answerable": result.answerable,
+                "citation_count": len(
+                    result.citations
+                ),
+            },
         )
 
         timing_fields = (
@@ -125,6 +163,7 @@ def answer_question(
         )
 
     except AuthorizationDenied as exc:
+        commit_audit(outcome="denied")
         record_qa_request(
             outcome="denied",
             answerable=None,
@@ -149,6 +188,7 @@ def answer_question(
         ) from exc
 
     except ValueError as exc:
+        commit_audit(outcome="invalid")
         record_qa_request(
             outcome="invalid",
             answerable=None,
@@ -173,6 +213,18 @@ def answer_question(
         ) from exc
 
     except Exception as exc:
+        try:
+            commit_audit(
+                outcome="failed",
+                details={
+                    "error_type": type(exc).__name__,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "问答失败审计事件写入失败，request_id=%s",
+                request_id,
+            )
         record_qa_request(
             outcome="failed",
             answerable=None,
