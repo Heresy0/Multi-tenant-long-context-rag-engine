@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
+from time import perf_counter
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from .managed_document_files import (
     CandidateFileSwap,
     ManagedDocumentFileService,
 )
+from .observability import event_message
 from .pgvector_indexing_service import (
     PgVectorIndexingService,
 )
@@ -61,11 +63,26 @@ class DocumentIndexingWorker:
         if job is None:
             return False
 
+        started = perf_counter()
+
         scope = RetrievalScope(
             tenant_id=job.tenant_id,
             knowledge_base_id=job.knowledge_base_id,
         )
         swap: CandidateFileSwap | None = None
+
+        logger.info(
+            event_message(
+                "indexing.job.started",
+                job_id=str(job.id),
+                document_id=str(job.document_id),
+                tenant_id=str(job.tenant_id),
+                knowledge_base_id=str(
+                    job.knowledge_base_id
+                ),
+                attempt_count=job.attempt_count,
+            )
+        )
 
         try:
             document = self._get_document(
@@ -119,6 +136,10 @@ class DocumentIndexingWorker:
                 scope=scope,
                 swap=swap,
                 error=exc,
+                duration_ms=round(
+                    (perf_counter() - started) * 1000,
+                    2,
+                ),
             )
             return True
 
@@ -152,10 +173,21 @@ class DocumentIndexingWorker:
             )
 
         logger.info(
-            "文档索引任务完成：job_id=%s document_id=%s chunks=%s",
-            job.id,
-            job.document_id,
-            indexed_chunk_count,
+            event_message(
+                "indexing.job.completed",
+                job_id=str(job.id),
+                document_id=str(job.document_id),
+                tenant_id=str(job.tenant_id),
+                knowledge_base_id=str(
+                    job.knowledge_base_id
+                ),
+                attempt_count=job.attempt_count,
+                indexed_chunk_count=indexed_chunk_count,
+                duration_ms=round(
+                    (perf_counter() - started) * 1000,
+                    2,
+                ),
+            )
         )
         return True
 
@@ -282,6 +314,7 @@ class DocumentIndexingWorker:
         scope: RetrievalScope,
         swap: CandidateFileSwap | None,
         error: Exception,
+        duration_ms: float,
     ) -> None:
         error_message = (
             str(error).strip()
@@ -325,10 +358,19 @@ class DocumentIndexingWorker:
         # 保留期清理阶段处理，不能在这里提前删除。
 
         logger.warning(
-            "文档索引任务失败：job_id=%s status=%s error=%s",
-            job.id,
-            failed_job.status,
-            error_message,
+            event_message(
+                "indexing.job.failed",
+                job_id=str(job.id),
+                document_id=str(job.document_id),
+                tenant_id=str(job.tenant_id),
+                knowledge_base_id=str(
+                    job.knowledge_base_id
+                ),
+                attempt_count=failed_job.attempt_count,
+                status=failed_job.status,
+                error_type=type(error).__name__,
+                duration_ms=duration_ms,
+            )
         )
 
     def _update_failed_document_status(

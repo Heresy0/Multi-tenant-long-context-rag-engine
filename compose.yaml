@@ -86,7 +86,16 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      disable: true
+      test:
+        [
+          "CMD",
+          "python",
+          "scripts/check_indexing_worker_health.py"
+        ]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     restart: unless-stopped
 
 volumes:

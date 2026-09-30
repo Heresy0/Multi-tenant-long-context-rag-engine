@@ -8,6 +8,7 @@ from .config import Settings
 from .retrieval_service import RetrievalService
 from .answer_service import AnswerService
 from .api.qa import router as qa_router
+from .api.system import router as system_router
 from .db.session import (
     create_database_engine,
     create_session_factory,
@@ -92,7 +93,4 @@ app = FastAPI(
 
 app.include_router(qa_router)
 app.include_router(knowledge_base_router)
-
-@app.get("/health",tags=["系统"])
-def health_check():
-    return{"status":"ok"}
+app.include_router(system_router)
