@@ -56,7 +56,27 @@ class KnowledgeDocumentListResponse(BaseModel):
     items: list[KnowledgeDocumentSummary]
 
 
+class DocumentIndexingJobSummary(BaseModel):
+    id: UUID
+    status: str
+    target_version: int
+    attempt_count: int
+    max_attempts: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class DocumentIndexingJobDetail(
+    DocumentIndexingJobSummary
+):
+    document_id: UUID
+    indexed_chunk_count: int | None
+    last_error: str | None
+    available_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
 class KnowledgeDocumentUploadResponse(BaseModel):
     document: KnowledgeDocumentSummary
-    indexed_chunk_count: int
-    skipped: bool
+    indexing_job: DocumentIndexingJobSummary

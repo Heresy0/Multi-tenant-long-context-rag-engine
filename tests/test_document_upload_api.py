@@ -1,6 +1,5 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -9,15 +8,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, event, func, select
-from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-import backend.app.api.knowledge_bases as knowledge_bases_api
 from backend.app.api.knowledge_bases import (
     router as knowledge_base_router,
 )
 from backend.app.db.base import Base
 from backend.app.db.models import (
+    DocumentIndexingJob,
     KnowledgeBase,
     KnowledgeBaseUserGrant,
     KnowledgeDocument,
@@ -29,7 +27,6 @@ from backend.app.security.dependencies import (
     get_current_principal,
 )
 from backend.app.security.principal import Principal
-from backend.app.security.retrieval_scope import RetrievalScope
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,14 +38,11 @@ class UploadApiContext:
     knowledge_base_id: UUID
     editor: Principal
     viewer: Principal
-    indexing_calls: list[tuple[Path, RetrievalScope, UUID]]
-    indexing_behavior: dict[str, object]
 
 
 @pytest.fixture
 def api_context(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[UploadApiContext]:
     engine: Engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -120,75 +114,6 @@ def api_context(
         ])
         session.commit()
 
-    indexing_calls: list[
-        tuple[Path, RetrievalScope, UUID]
-    ] = []
-    indexing_behavior: dict[str, object] = {
-        "error": None,
-        "chunk_count": 2,
-    }
-
-    class FakePgVectorIndexingService:
-        def __init__(
-            self,
-            *,
-            session: Session,
-            settings,
-        ) -> None:
-            del settings
-            self._session = session
-
-        def index_file(
-            self,
-            *,
-            file_path: Path,
-            scope: RetrievalScope,
-            created_by_user_id: UUID,
-        ) -> int:
-            indexing_calls.append((
-                file_path,
-                scope,
-                created_by_user_id,
-            ))
-
-            error = indexing_behavior["error"]
-            if isinstance(error, Exception):
-                raise error
-
-            chunk_count = int(
-                indexing_behavior["chunk_count"]
-            )
-            document = KnowledgeDocument(
-                tenant_id=scope.tenant_id,
-                knowledge_base_id=(
-                    scope.knowledge_base_id
-                ),
-                created_by_user_id=created_by_user_id,
-                source_id=sha256(
-                    file_path.as_uri().encode("utf-8")
-                ).hexdigest(),
-                file_name=file_path.name,
-                storage_uri=file_path.as_uri(),
-                mime_type="text/plain",
-                content_hash=sha256(
-                    file_path.read_bytes()
-                ).hexdigest(),
-                status="ready",
-                version=1,
-                metadata_json={
-                    "chunk_count": chunk_count,
-                },
-            )
-            self._session.add(document)
-            self._session.commit()
-            return chunk_count
-
-    monkeypatch.setattr(
-        knowledge_bases_api,
-        "PgVectorIndexingService",
-        FakePgVectorIndexingService,
-    )
-
     storage_dir = tmp_path / "documents"
     app = FastAPI()
     app.state.database_session_factory = session_factory
@@ -215,8 +140,6 @@ def api_context(
                 tenant_id=tenant_id,
                 external_subject="viewer",
             ),
-            indexing_calls=indexing_calls,
-            indexing_behavior=indexing_behavior,
         )
 
     finally:
@@ -240,19 +163,38 @@ def _upload_url(context: UploadApiContext) -> str:
     )
 
 
-def _stored_file(
+def _job_url(
     context: UploadApiContext,
-    file_name: str,
-) -> Path:
+    job_id: str,
+) -> str:
     return (
-        context.storage_dir
-        / str(context.tenant_id)
-        / str(context.knowledge_base_id)
-        / file_name
+        "/api/knowledge-bases/"
+        f"{context.knowledge_base_id}/"
+        f"indexing-jobs/{job_id}"
     )
 
 
-def test_editor_can_upload_document(
+def _staged_files(
+    context: UploadApiContext,
+) -> list[Path]:
+    directory = (
+        context.storage_dir
+        / str(context.tenant_id)
+        / str(context.knowledge_base_id)
+        / ".staging"
+    )
+
+    if not directory.exists():
+        return []
+
+    return [
+        path
+        for path in directory.iterdir()
+        if path.is_file()
+    ]
+
+
+def test_editor_upload_is_accepted_and_queued(
     api_context: UploadApiContext,
 ) -> None:
     _set_principal(api_context, api_context.editor)
@@ -268,34 +210,32 @@ def test_editor_can_upload_document(
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
     assert payload["document"]["file_name"] == (
         "研发手册.txt"
     )
-    assert payload["document"]["status"] == "ready"
-    assert payload["document"]["chunk_count"] == 2
-    assert payload["indexed_chunk_count"] == 2
-    assert payload["skipped"] is False
+    assert payload["document"]["status"] == "pending"
+    assert payload["document"]["version"] == 1
+    assert payload["document"]["chunk_count"] == 0
     assert "storage_uri" not in payload["document"]
+    assert payload["indexing_job"]["status"] == "queued"
+    assert payload["indexing_job"]["target_version"] == 1
+    assert payload["indexing_job"]["attempt_count"] == 0
+    assert payload["indexing_job"]["max_attempts"] == 3
+    assert "staged_storage_uri" not in payload["indexing_job"]
 
-    stored_file = _stored_file(
-        api_context,
-        "研发手册.txt",
-    )
-    assert stored_file.read_text(encoding="utf-8") == (
+    staged_files = _staged_files(api_context)
+    assert len(staged_files) == 1
+    assert staged_files[0].read_text(encoding="utf-8") == (
         "企业知识库内容"
     )
-    assert api_context.indexing_calls == [(
-        stored_file.resolve(),
-        RetrievalScope(
-            tenant_id=api_context.tenant_id,
-            knowledge_base_id=(
-                api_context.knowledge_base_id
-            ),
-        ),
-        api_context.editor.user_id,
-    )]
+    assert (
+        api_context.storage_dir
+        / str(api_context.tenant_id)
+        / str(api_context.knowledge_base_id)
+        / "研发手册.txt"
+    ).exists() is False
 
     with api_context.session_factory() as session:
         document_count = session.scalar(
@@ -303,8 +243,13 @@ def test_editor_can_upload_document(
                 KnowledgeDocument
             )
         )
+        job = session.scalar(
+            select(DocumentIndexingJob)
+        )
 
     assert document_count == 1
+    assert job is not None
+    assert str(job.id) == payload["indexing_job"]["id"]
 
 
 def test_viewer_cannot_upload_document(
@@ -327,8 +272,7 @@ def test_viewer_cannot_upload_document(
     assert response.json() == {
         "detail": "没有权限访问该知识库。",
     }
-    assert api_context.indexing_calls == []
-    assert api_context.storage_dir.exists() is False
+    assert _staged_files(api_context) == []
 
 
 def test_upload_rejects_unsupported_file_type(
@@ -351,8 +295,7 @@ def test_upload_rejects_unsupported_file_type(
     assert response.json() == {
         "detail": "暂不支持该文件类型：.exe",
     }
-    assert api_context.indexing_calls == []
-    assert api_context.storage_dir.exists() is False
+    assert _staged_files(api_context) == []
 
 
 def test_upload_rejects_file_over_size_limit(
@@ -376,41 +319,104 @@ def test_upload_rejects_file_over_size_limit(
     assert response.json() == {
         "detail": "上传文件超过允许的最大大小",
     }
-    assert api_context.indexing_calls == []
-    assert _stored_file(
-        api_context,
-        "oversized.txt",
-    ).exists() is False
+    assert _staged_files(api_context) == []
 
 
-def test_upload_removes_file_when_indexing_fails(
+def test_second_active_upload_returns_conflict(
     api_context: UploadApiContext,
 ) -> None:
     _set_principal(api_context, api_context.editor)
-    api_context.indexing_behavior["error"] = (
-        RuntimeError("embedding service unavailable")
-    )
+    client = TestClient(api_context.app)
 
-    response = TestClient(
-        api_context.app,
-        raise_server_exceptions=False,
-    ).post(
+    first = client.post(
         _upload_url(api_context),
         files={
             "file": (
-                "研发手册.txt",
-                b"content",
+                "并发上传.txt",
+                b"first",
+                "text/plain",
+            ),
+        },
+    )
+    second = client.post(
+        _upload_url(api_context),
+        files={
+            "file": (
+                "并发上传.txt",
+                b"second",
                 "text/plain",
             ),
         },
     )
 
-    assert response.status_code == 500
-    assert response.json() == {
-        "detail": "文档入库失败，请稍后重试。",
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert second.json() == {
+        "detail": "该文档已经存在活动索引任务。",
     }
-    assert len(api_context.indexing_calls) == 1
-    assert _stored_file(
-        api_context,
-        "研发手册.txt",
-    ).exists() is False
+    assert len(_staged_files(api_context)) == 1
+
+    with api_context.session_factory() as session:
+        document_count = session.scalar(
+            select(func.count()).select_from(
+                KnowledgeDocument
+            )
+        )
+        job_count = session.scalar(
+            select(func.count()).select_from(
+                DocumentIndexingJob
+            )
+        )
+
+    assert document_count == 1
+    assert job_count == 1
+
+
+def test_editor_can_query_job_but_viewer_cannot(
+    api_context: UploadApiContext,
+) -> None:
+    client = TestClient(api_context.app)
+    _set_principal(api_context, api_context.editor)
+    upload_response = client.post(
+        _upload_url(api_context),
+        files={
+            "file": (
+                "任务状态.txt",
+                b"content",
+                "text/plain",
+            ),
+        },
+    )
+    job_id = upload_response.json()[
+        "indexing_job"
+    ]["id"]
+
+    response = client.get(
+        _job_url(api_context, job_id)
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == job_id
+    assert payload["status"] == "queued"
+    assert payload["indexed_chunk_count"] is None
+    assert payload["last_error"] is None
+    assert payload["started_at"] is None
+    assert payload["finished_at"] is None
+
+    _set_principal(api_context, api_context.viewer)
+    forbidden = client.get(
+        _job_url(api_context, job_id)
+    )
+
+    assert forbidden.status_code == 403
+
+    _set_principal(api_context, api_context.editor)
+    missing = client.get(
+        _job_url(api_context, str(uuid4()))
+    )
+
+    assert missing.status_code == 404
+    assert missing.json() == {
+        "detail": "索引任务不存在。",
+    }

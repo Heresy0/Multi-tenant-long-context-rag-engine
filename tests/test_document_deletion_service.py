@@ -12,6 +12,7 @@ from backend.app.db.base import Base
 from backend.app.db.models import (
     EMBEDDING_DIMENSION,
     DocumentChunk,
+    DocumentIndexingJob,
     KnowledgeBase,
     KnowledgeDocument,
     Tenant,
@@ -227,6 +228,72 @@ def test_deletes_managed_file_document_and_chunks(
     assert _document_count(session, document_id) == 0
     assert _chunk_count(session, document_id) == 0
     assert _staged_files(managed_file.parent) == []
+
+
+def test_deletes_queued_job_and_its_staged_candidate(
+    session: Session,
+    scope_data: ScopeData,
+    tmp_path: Path,
+) -> None:
+    storage_dir = tmp_path / "documents"
+    final_path = (
+        storage_dir
+        / str(scope_data.tenant_id)
+        / str(scope_data.primary_kb_id)
+        / "待索引.txt"
+    )
+    staging_directory = final_path.parent / ".staging"
+    staging_directory.mkdir(parents=True)
+    candidate_path = staging_directory / "candidate.txt"
+    candidate_path.write_bytes(b"candidate")
+    document = KnowledgeDocument(
+        tenant_id=scope_data.tenant_id,
+        knowledge_base_id=scope_data.primary_kb_id,
+        created_by_user_id=scope_data.user_id,
+        source_id="c" * 64,
+        file_name="待索引.txt",
+        storage_uri=final_path.resolve().as_uri(),
+        mime_type="text/plain",
+        content_hash="d" * 64,
+        status="pending",
+        version=1,
+        metadata_json={},
+    )
+    session.add(document)
+    session.flush()
+    job = DocumentIndexingJob(
+        tenant_id=scope_data.tenant_id,
+        knowledge_base_id=scope_data.primary_kb_id,
+        document_id=document.id,
+        requested_by_user_id=scope_data.user_id,
+        staged_storage_uri=(
+            candidate_path.resolve().as_uri()
+        ),
+        candidate_file_name="待索引.txt",
+        candidate_mime_type="text/plain",
+        candidate_content_hash="d" * 64,
+        target_version=1,
+        status="queued",
+        attempt_count=0,
+        max_attempts=3,
+    )
+    session.add(job)
+    session.commit()
+    document_id = document.id
+    job_id = job.id
+
+    DocumentDeletionService(
+        session=session,
+        storage_dir=storage_dir,
+    ).delete(
+        scope=scope_data.primary_scope,
+        document_id=document_id,
+    )
+
+    assert candidate_path.exists() is False
+    assert staging_directory.exists() is False
+    assert session.get(KnowledgeDocument, document_id) is None
+    assert session.get(DocumentIndexingJob, job_id) is None
 
 
 def test_does_not_delete_document_outside_scope(

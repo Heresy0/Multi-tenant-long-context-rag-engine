@@ -36,7 +36,10 @@ flowchart LR
     R --> L[大模型服务]
     A --> D[文档管理服务]
     D --> F[(受管文件目录)]
-    D --> P
+    D --> J[(文档索引任务)]
+    J --> W[索引 Worker]
+    W --> F
+    W --> P
     A --> O[结构化日志与耗时指标]
 ```
 
@@ -138,12 +141,12 @@ docker compose ps
 
 本地用户通过 Keycloak Token 中的 `sub` 与数据库中的 `external_subject` 关联。
 
-### 5. 启动 API
+### 5. 启动 API 和索引 Worker
 
-Keycloak Realm 和模型配置准备完成后，构建并启动 API：
+Keycloak Realm 和模型配置准备完成后，构建并启动全部服务：
 
 ```powershell
-docker compose up --build -d api
+docker compose up --build -d
 docker compose ps
 ```
 
@@ -167,10 +170,10 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 - OpenAPI JSON：<http://127.0.0.1:8000/openapi.json>
 - Keycloak：<http://127.0.0.1:8080>
 
-查看 API 日志：
+查看 API 和索引 Worker 日志：
 
 ```powershell
-docker compose logs -f api
+docker compose logs -f api worker
 ```
 
 停止服务：
@@ -244,6 +247,18 @@ POST /api/knowledge-bases/{knowledge_base_id}/documents
 ```
 
 上传操作要求当前用户至少具有目标知识库的 `editor` 权限。
+接口完成安全暂存和任务创建后返回 `202 Accepted`，响应中的
+`indexing_job.id` 是后续查询索引进度的任务标识。文件在任务成功前
+不会覆盖已有的正式版本。
+
+索引任务由独立 Worker 执行。可以使用以下接口查询任务状态：
+
+```text
+GET /api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}
+```
+
+任务状态依次为 `queued`、`running`，最终进入 `succeeded` 或
+`failed`。临时失败会按照任务的最大尝试次数自动重试。
 
 ### 通过命令行写入单个文件
 
@@ -281,7 +296,8 @@ Authorization: Bearer <access_token>
 | `GET` | `/health` | 无 | 健康检查 |
 | `GET` | `/api/knowledge-bases` | 已登录 | 列出当前用户可访问的知识库 |
 | `GET` | `/api/knowledge-bases/{knowledge_base_id}/documents` | viewer | 列出知识库文档 |
-| `POST` | `/api/knowledge-bases/{knowledge_base_id}/documents` | editor | 上传、更新并索引文档 |
+| `POST` | `/api/knowledge-bases/{knowledge_base_id}/documents` | editor | 暂存文档并创建异步索引任务 |
+| `GET` | `/api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}` | editor | 查询文档索引任务状态 |
 | `DELETE` | `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}` | editor | 删除文档、分块和受管文件 |
 | `POST` | `/api/qa` | viewer | 在指定知识库范围内问答 |
 

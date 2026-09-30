@@ -204,12 +204,20 @@ def collect_units(
     return units
 
 
-def split_docx(file_path: str | Path) -> list[Document]:
+def split_docx(
+    file_path: str | Path,
+    *,
+    document_name: str | None = None,
+) -> list[Document]:
     path = Path(file_path).resolve()
     word_document = WordDocument(path)
 
-    document_name = path.stem
-    document_type = document_type_from_name(document_name)
+    resolved_document_name = (
+        document_name or path.stem
+    )
+    document_type = document_type_from_name(
+        resolved_document_name
+    )
     units = collect_units(word_document)
 
     normal_splitter = RecursiveCharacterTextSplitter(
@@ -242,7 +250,7 @@ def split_docx(file_path: str | Path) -> list[Document]:
         section_name = section_path or "文档说明"
 
         prefix = (
-            f"文档：{document_name}\n"
+            f"文档：{resolved_document_name}\n"
             f"章节：{section_name}\n"
         )
 
@@ -261,7 +269,9 @@ def split_docx(file_path: str | Path) -> list[Document]:
                     page_content=f"{prefix}\n{part}",
                     metadata={
                         "source": str(path),
-                        "document_name": document_name,
+                        "document_name": (
+                            resolved_document_name
+                        ),
                         "document_type": document_type,
                         "section_path": section_path,
                         "chunk_type": unit.kind,

@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     JSON,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -507,6 +508,192 @@ class KnowledgeDocument(TimestampMixin, Base):
             "tenant_id",
             "knowledge_base_id",
             "status",
+        ),
+    )
+
+
+class DocumentIndexingJob(TimestampMixin, Base):
+    """一次持久化的文档索引任务。"""
+
+    __tablename__ = "document_indexing_jobs"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+
+    knowledge_base_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+
+    document_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=False,
+    )
+
+    staged_storage_uri: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    candidate_file_name: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    candidate_mime_type: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    candidate_content_hash: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+
+    target_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="queued",
+        server_default=text("'queued'"),
+    )
+
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+
+    max_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=3,
+        server_default=text("3"),
+    )
+
+    indexed_chunk_count: Mapped[int | None] = (
+        mapped_column(
+            Integer,
+            nullable=True,
+        )
+    )
+
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    last_error: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            [
+                "tenant_id",
+                "knowledge_base_id",
+                "document_id",
+            ],
+            [
+                "documents.tenant_id",
+                "documents.knowledge_base_id",
+                "documents.id",
+            ],
+            name="fk_indexing_jobs_document",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            [
+                "tenant_id",
+                "requested_by_user_id",
+            ],
+            [
+                "users.tenant_id",
+                "users.id",
+            ],
+            name="fk_indexing_jobs_requested_by_user",
+        ),
+        CheckConstraint(
+            "status IN "
+            "('queued', 'running', 'succeeded', 'failed')",
+            name="ck_indexing_jobs_status",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0",
+            name="ck_indexing_jobs_attempt_count",
+        ),
+        CheckConstraint(
+            "max_attempts >= 1",
+            name="ck_indexing_jobs_max_attempts",
+        ),
+        CheckConstraint(
+            "attempt_count <= max_attempts",
+            name="ck_indexing_jobs_attempt_limit",
+        ),
+        CheckConstraint(
+            "target_version >= 1",
+            name="ck_indexing_jobs_target_version",
+        ),
+        CheckConstraint(
+            "indexed_chunk_count IS NULL "
+            "OR indexed_chunk_count >= 0",
+            name="ck_indexing_jobs_chunk_count",
+        ),
+        Index(
+            "ix_indexing_jobs_claim",
+            "status",
+            "available_at",
+            "created_at",
+        ),
+        Index(
+            "ix_indexing_jobs_scope_document",
+            "tenant_id",
+            "knowledge_base_id",
+            "document_id",
+            "created_at",
+        ),
+        Index(
+            "uq_indexing_jobs_active_document",
+            "tenant_id",
+            "knowledge_base_id",
+            "document_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN ('queued', 'running')"
+            ),
+            sqlite_where=text(
+                "status IN ('queued', 'running')"
+            ),
         ),
     )
 
