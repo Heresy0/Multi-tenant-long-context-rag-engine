@@ -116,6 +116,74 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      alertmanager:
+        condition: service_healthy
+    restart: unless-stopped
+
+  alert-webhook:
+    build:
+      context: .
+    container_name: enterprise-knowledge-alert-webhook
+    env_file:
+      - path: .env.alerting
+        required: false
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command:
+      - python
+      - -m
+      - uvicorn
+      - backend.app.alert_webhook_gateway:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8090"
+    ports:
+      - "127.0.0.1:8090:8090"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3)"
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    container_name: enterprise-knowledge-alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=0.0.0.0:9093
+      - --cluster.listen-address=
+      - --enable-feature=utf8-strict-mode
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - enterprise_alertmanager_data:/alertmanager
+    depends_on:
+      alert-webhook:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://127.0.0.1:9093/-/ready"
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     restart: unless-stopped
 
   grafana:
@@ -142,3 +210,4 @@ volumes:
   enterprise_document_data:
   enterprise_prometheus_data:
   enterprise_grafana_data:
+  enterprise_alertmanager_data:
