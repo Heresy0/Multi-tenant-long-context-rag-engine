@@ -172,6 +172,7 @@ def _settings(scenario: Scenario) -> SimpleNamespace:
         document_storage_dir=scenario.storage_dir,
         indexing_job_retry_delay_seconds=0,
         indexing_job_stale_after_seconds=60,
+        indexing_failed_file_retention_hours=24,
     )
 
 
@@ -360,6 +361,29 @@ def test_worker_restores_ready_version_and_stops_after_limit(
         scenario,
         "生产手册.txt",
     ).read_bytes() == b"old-version"
+    retained_candidates = _staged_files(scenario)
+    assert len(retained_candidates) == 1
+    assert retained_candidates[0].read_bytes() == (
+        b"new-version"
+    )
+
+    failed_job.finished_at = (
+        datetime.now(timezone.utc)
+        - timedelta(hours=25)
+    )
+    session.commit()
+
+    assert (
+        worker.cleanup_expired_failed_candidates()
+        == 1
+    )
+    session.expire_all()
+    cleaned_job = session.get(
+        DocumentIndexingJob,
+        upload.indexing_job.id,
+    )
+    assert cleaned_job is not None
+    assert cleaned_job.staged_candidate_deleted_at is not None
     assert _staged_files(scenario) == []
 
 

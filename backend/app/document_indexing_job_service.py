@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -17,6 +18,12 @@ ACTIVE_STATUSES = (
     "running",
 )
 
+JOB_STATUSES = (
+    *ACTIVE_STATUSES,
+    "succeeded",
+    "failed",
+)
+
 
 class DocumentIndexingJobNotFound(LookupError):
     """指定范围内不存在索引任务。"""
@@ -28,6 +35,10 @@ class ActiveDocumentIndexingJobExists(RuntimeError):
 
 class InvalidJobTransition(RuntimeError):
     """索引任务状态转换不合法。"""
+
+
+class DocumentIndexingJobConflict(RuntimeError):
+    """索引任务与文档当前状态冲突。"""
 
 
 class DocumentIndexingJobService:
@@ -335,6 +346,152 @@ class DocumentIndexingJobService:
             )
 
         return job
+
+    def list_jobs(
+        self,
+        *,
+        scope: RetrievalScope,
+        status: str | None = None,
+        document_id: UUID | None = None,
+        limit: int = 50,
+    ) -> list[DocumentIndexingJob]:
+        """按知识库范围列出最近的索引任务。"""
+        if status is not None and status not in JOB_STATUSES:
+            raise ValueError("未知的索引任务状态")
+
+        if not 1 <= limit <= 100:
+            raise ValueError("limit 必须介于 1 和 100 之间")
+
+        statement = select(DocumentIndexingJob).where(
+            DocumentIndexingJob.tenant_id
+            == scope.tenant_id,
+            DocumentIndexingJob.knowledge_base_id
+            == scope.knowledge_base_id,
+        )
+
+        if status is not None:
+            statement = statement.where(
+                DocumentIndexingJob.status == status
+            )
+
+        if document_id is not None:
+            statement = statement.where(
+                DocumentIndexingJob.document_id
+                == document_id
+            )
+
+        return list(
+            self._session.scalars(
+                statement.order_by(
+                    DocumentIndexingJob.created_at.desc(),
+                    DocumentIndexingJob.id.desc(),
+                ).limit(limit)
+            ).all()
+        )
+
+    def retry_failed(
+        self,
+        *,
+        scope: RetrievalScope,
+        job_id: UUID,
+        candidate_validator: Callable[
+            [DocumentIndexingJob],
+            None,
+        ] | None = None,
+    ) -> DocumentIndexingJob:
+        """把仍然有效的最终失败任务重新加入队列。"""
+        job = self._get_locked(
+            scope=scope,
+            job_id=job_id,
+        )
+
+        if job.status != "failed":
+            self._session.rollback()
+            raise InvalidJobTransition(
+                "只有最终失败的任务可以人工重试。"
+            )
+
+        try:
+            active_job_id = self._session.scalar(
+                select(DocumentIndexingJob.id).where(
+                    DocumentIndexingJob.tenant_id
+                    == scope.tenant_id,
+                    DocumentIndexingJob.knowledge_base_id
+                    == scope.knowledge_base_id,
+                    DocumentIndexingJob.document_id
+                    == job.document_id,
+                    DocumentIndexingJob.id != job.id,
+                    DocumentIndexingJob.status.in_(
+                        ACTIVE_STATUSES
+                    ),
+                )
+            )
+
+            if active_job_id is not None:
+                raise DocumentIndexingJobConflict(
+                    "该文档已经存在活动索引任务。"
+                )
+
+            document = self._session.scalar(
+                select(KnowledgeDocument)
+                .where(
+                    KnowledgeDocument.tenant_id
+                    == scope.tenant_id,
+                    KnowledgeDocument.knowledge_base_id
+                    == scope.knowledge_base_id,
+                    KnowledgeDocument.id
+                    == job.document_id,
+                )
+                .with_for_update()
+            )
+
+            if document is None:
+                raise DocumentIndexingJobNotFound(
+                    "索引任务对应的文档不存在。"
+                )
+
+            if (
+                document.status == "ready"
+                and document.version >= job.target_version
+            ):
+                raise DocumentIndexingJobConflict(
+                    "该失败任务对应的文档版本已经过期。"
+                )
+
+            if job.staged_candidate_deleted_at is not None:
+                raise DocumentIndexingJobConflict(
+                    "索引候选文件已经过期，请重新上传文档。"
+                )
+
+            if candidate_validator is not None:
+                candidate_validator(job)
+
+            job.status = "queued"
+            job.attempt_count = 0
+            job.indexed_chunk_count = None
+            job.available_at = self._now()
+            job.started_at = None
+            job.finished_at = None
+            job.last_error = None
+            job.staged_candidate_deleted_at = None
+
+            if document.status != "ready":
+                document.status = "pending"
+                document.last_error = None
+
+            self._session.commit()
+            self._session.refresh(job)
+            return job
+
+        except IntegrityError as exc:
+            self._session.rollback()
+            raise DocumentIndexingJobConflict(
+                "该文档已经存在活动索引任务。"
+            ) from exc
+
+        except Exception:
+            self._session.rollback()
+            raise
 
     def recover_stale_running_jobs(
         self,

@@ -84,6 +84,17 @@ def main() -> None:
                             recovered,
                         )
 
+                    cleaned = (
+                        worker
+                        .cleanup_expired_failed_candidates()
+                    )
+
+                    if cleaned:
+                        logger.info(
+                            "已清理过期失败任务候选文件：count=%s",
+                            cleaned,
+                        )
+
                 processed = worker.run_once()
 
             if not processed:

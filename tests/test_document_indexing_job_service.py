@@ -18,6 +18,7 @@ from backend.app.db.models import (
 )
 from backend.app.document_indexing_job_service import (
     ActiveDocumentIndexingJobExists,
+    DocumentIndexingJobConflict,
     DocumentIndexingJobNotFound,
     DocumentIndexingJobService,
     InvalidJobTransition,
@@ -475,3 +476,147 @@ def test_recovers_stale_running_jobs_and_preserves_cleanup_attempt(
     assert stored_terminal.attempt_count == 0
     assert stored_terminal.finished_at is None
     assert "超过运行时限" in stored_terminal.last_error
+
+
+def test_lists_jobs_only_inside_scope_with_filters(
+    session: Session,
+    scenario: Scenario,
+) -> None:
+    service = DocumentIndexingJobService(
+        session=session
+    )
+    primary = _create_job(service, scenario)
+    claimed = service.claim_next()
+    assert claimed is not None
+    service.mark_succeeded(
+        scope=scenario.primary_scope,
+        job_id=primary.id,
+        indexed_chunk_count=3,
+    )
+    other = _create_job(
+        service,
+        scenario,
+        scope=scenario.other_scope,
+        document_id=scenario.other_document_id,
+        marker="d",
+    )
+
+    primary_jobs = service.list_jobs(
+        scope=scenario.primary_scope,
+        status="succeeded",
+        document_id=scenario.primary_document_id,
+        limit=10,
+    )
+
+    assert [job.id for job in primary_jobs] == [
+        primary.id,
+    ]
+    assert other.id not in {
+        job.id
+        for job in primary_jobs
+    }
+
+    with pytest.raises(ValueError, match="未知"):
+        service.list_jobs(
+            scope=scenario.primary_scope,
+            status="cancelled",
+        )
+
+
+def test_retries_failed_job_and_resets_attempt_state(
+    session: Session,
+    scenario: Scenario,
+) -> None:
+    service = DocumentIndexingJobService(
+        session=session,
+        retry_delay_seconds=0,
+    )
+    job = _create_job(
+        service,
+        scenario,
+        max_attempts=1,
+    )
+    document = session.get(
+        KnowledgeDocument,
+        scenario.primary_document_id,
+    )
+    assert document is not None
+    document.status = "failed"
+    document.last_error = "embedding unavailable"
+    session.commit()
+    claimed = service.claim_next()
+    assert claimed is not None
+    service.mark_failed(
+        scope=scenario.primary_scope,
+        job_id=job.id,
+        error="embedding unavailable",
+    )
+
+    retried = service.retry_failed(
+        scope=scenario.primary_scope,
+        job_id=job.id,
+    )
+
+    assert retried.status == "queued"
+    assert retried.attempt_count == 0
+    assert retried.last_error is None
+    assert retried.started_at is None
+    assert retried.finished_at is None
+    assert document.status == "pending"
+    assert document.last_error is None
+
+
+def test_rejects_retry_when_job_is_active_or_stale(
+    session: Session,
+    scenario: Scenario,
+) -> None:
+    service = DocumentIndexingJobService(
+        session=session,
+        retry_delay_seconds=0,
+    )
+    failed = _create_job(
+        service,
+        scenario,
+        max_attempts=1,
+    )
+    claimed = service.claim_next()
+    assert claimed is not None
+    service.mark_failed(
+        scope=scenario.primary_scope,
+        job_id=failed.id,
+        error="permanent failure",
+    )
+    active = _create_job(
+        service,
+        scenario,
+        marker="d",
+        target_version=3,
+    )
+
+    with pytest.raises(
+        DocumentIndexingJobConflict,
+        match="活动索引任务",
+    ):
+        service.retry_failed(
+            scope=scenario.primary_scope,
+            job_id=failed.id,
+        )
+
+    active.status = "succeeded"
+    document = session.get(
+        KnowledgeDocument,
+        scenario.primary_document_id,
+    )
+    assert document is not None
+    document.status = "ready"
+    document.version = failed.target_version
+    session.commit()
+
+    with pytest.raises(
+        DocumentIndexingJobConflict,
+        match="版本已经过期",
+    ):
+        service.retry_failed(
+            scope=scenario.primary_scope,
+            job_id=failed.id,
+        )

@@ -158,6 +158,34 @@ class ManagedDocumentFileService:
             staged_path.parent
         )
 
+    def require_staged_candidate(
+        self,
+        *,
+        staged_storage_uri: str,
+        scope: RetrievalScope,
+        expected_content_hash: str,
+    ) -> Path:
+        """确认人工重试所需的候选文件仍存在且内容未变。"""
+        staged_path = self.resolve_staged_uri(
+            staged_storage_uri,
+            scope=scope,
+        )
+
+        if not staged_path.is_file():
+            raise FileNotFoundError(
+                "索引候选文件已经不存在，请重新上传文档。"
+            )
+
+        if (
+            self._calculate_hash(staged_path)
+            != expected_content_hash
+        ):
+            raise ManagedDocumentPathError(
+                "暂存候选文件内容哈希不匹配"
+            )
+
+        return staged_path
+
     def resolve_staged_uri(
         self,
         storage_uri: str,
