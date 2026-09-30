@@ -102,6 +102,15 @@ class FakeAuthorizationService:
         return self.scope
 
 
+class FakeAuditService:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def record(self, **fields):
+        self.calls.append(fields)
+        return object()
+
+
 def create_test_client(
     monkeypatch,
     answer_service: FakeAnswerService,
@@ -119,10 +128,14 @@ def create_test_client(
         scope=TEST_SCOPE,
         error=authorization_error,
     )
+    audit_service = FakeAuditService()
 
     app.dependency_overrides[
         get_database_session
     ] = lambda: session
+    app.dependency_overrides[
+        qa_module.get_audit_service
+    ] = lambda: audit_service
 
     if authenticated:
         app.dependency_overrides[

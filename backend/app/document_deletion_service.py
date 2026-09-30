@@ -11,6 +11,10 @@ from .db.models import (
     DocumentIndexingJob,
     KnowledgeDocument,
 )
+from .audit_service import (
+    AuditService,
+    log_committed_audit_event,
+)
 from .security.retrieval_scope import RetrievalScope
 
 
@@ -42,6 +46,8 @@ class DocumentDeletionService:
         *,
         scope: RetrievalScope,
         document_id: UUID,
+        actor_user_id: UUID | None = None,
+        request_id: str | None = None,
     ) -> None:
         document = self._session.scalar(
             select(KnowledgeDocument)
@@ -103,8 +109,29 @@ class DocumentDeletionService:
             managed_path.replace(staged_path)
 
         try:
+            audit_event = None
+            if actor_user_id is not None:
+                audit_event = AuditService(
+                    self._session
+                ).add(
+                    tenant_id=scope.tenant_id,
+                    actor_user_id=actor_user_id,
+                    knowledge_base_id=(
+                        scope.knowledge_base_id
+                    ),
+                    action="document.deleted",
+                    resource_type="document",
+                    resource_id=document_id,
+                    outcome="success",
+                    request_id=request_id,
+                    details={
+                        "document_version": document.version,
+                    },
+                )
             self._session.delete(document)
             self._session.commit()
+            if audit_event is not None:
+                log_committed_audit_event(audit_event)
 
         except Exception:
             self._session.rollback()

@@ -1,0 +1,54 @@
+logging {
+  level  = "info"
+  format = "json"
+}
+
+discovery.docker "enterprise" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "enterprise" {
+  targets = discovery.docker.enterprise.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/enterprise-knowledge-.*"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    replacement   = "$1"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    replacement  = "enterprise-knowledge"
+    target_label = "stack"
+  }
+
+  rule {
+    replacement  = "local"
+    target_label = "environment"
+  }
+}
+
+loki.source.docker "enterprise" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.enterprise.output
+  forward_to    = [loki.write.local.receiver]
+  relabel_rules = discovery.relabel.enterprise.rules
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

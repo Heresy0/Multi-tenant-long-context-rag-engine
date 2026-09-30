@@ -186,6 +186,38 @@ services:
       retries: 3
     restart: unless-stopped
 
+  loki:
+    image: grafana/loki:3.7.3
+    container_name: enterprise-knowledge-loki
+    command:
+      - -config.file=/etc/loki/config.yml
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/config.yml:ro
+      - enterprise_loki_data:/loki
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.20.0
+    container_name: enterprise-knowledge-alloy
+    user: "0"
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    ports:
+      - "127.0.0.1:12345:12345"
+    volumes:
+      - ./monitoring/alloy.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - enterprise_alloy_data:/var/lib/alloy/data
+    depends_on:
+      loki:
+        condition: service_started
+    restart: unless-stopped
+
   grafana:
     image: grafana/grafana:13.2.3
     container_name: enterprise-knowledge-grafana
@@ -202,6 +234,8 @@ services:
     depends_on:
       prometheus:
         condition: service_started
+      loki:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
@@ -211,3 +245,5 @@ volumes:
   enterprise_prometheus_data:
   enterprise_grafana_data:
   enterprise_alertmanager_data:
+  enterprise_loki_data:
+  enterprise_alloy_data:
