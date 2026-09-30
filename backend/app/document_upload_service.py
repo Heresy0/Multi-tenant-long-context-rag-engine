@@ -7,47 +7,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db.models import KnowledgeDocument
+from .document_staging_service import (
+    DocumentStagingService,
+    InvalidUpload,
+    UnsupportedUploadType,
+    UploadTooLarge,
+)
 from .pgvector_indexing_service import (
     PgVectorIndexingService,
 )
 from .security.retrieval_scope import RetrievalScope
-
-
-SUPPORTED_SUFFIXES = {
-    ".pdf",
-    ".docx",
-    ".txt",
-    ".md",
-}
-
-READ_BLOCK_SIZE = 1024 * 1024
-
-WINDOWS_RESERVED_NAMES = {
-    "CON",
-    "PRN",
-    "AUX",
-    "NUL",
-    *{
-        f"COM{index}"
-        for index in range(1, 10)
-    },
-    *{
-        f"LPT{index}"
-        for index in range(1, 10)
-    },
-}
-
-
-class InvalidUpload(ValueError):
-    """上传文件不符合要求。"""
-
-
-class UnsupportedUploadType(InvalidUpload):
-    """上传文件类型不受支持。"""
-
-
-class UploadTooLarge(InvalidUpload):
-    """上传文件超过大小限制。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,19 +37,12 @@ class DocumentUploadService:
         storage_dir: str | Path,
         max_upload_bytes: int,
     ) -> None:
-        if max_upload_bytes < 1:
-            raise ValueError(
-                "max_upload_bytes 必须是正整数"
-            )
-
         self._session = session
         self._indexing_service = indexing_service
-        self._storage_dir = (
-            Path(storage_dir)
-            .expanduser()
-            .resolve()
+        self._staging_service = DocumentStagingService(
+            storage_dir=storage_dir,
+            max_upload_bytes=max_upload_bytes,
         )
-        self._max_upload_bytes = max_upload_bytes
 
     def upload(
         self,
@@ -90,43 +52,19 @@ class DocumentUploadService:
         scope: RetrievalScope,
         created_by_user_id: UUID,
     ) -> DocumentUploadResult:
-        safe_file_name = self._validate_file_name(
-            file_name
+        staged_document = self._staging_service.stage(
+            file_name=file_name,
+            source=source,
+            scope=scope,
         )
 
-        directory = (
-            self._storage_dir
-            / str(scope.tenant_id)
-            / str(scope.knowledge_base_id)
-        ).resolve()
-
-        directory.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        target_path = (
-            directory / safe_file_name
-        ).resolve()
-
-        if target_path.parent != directory:
-            raise InvalidUpload(
-                "上传文件路径不合法"
-            )
-
-        temporary_path = (
-            directory
-            / f".upload-{uuid4().hex}.tmp"
-        )
+        directory = staged_document.target_path.parent
+        target_path = staged_document.target_path
+        temporary_path = staged_document.staged_path
 
         backup_path = (
             directory
             / f".backup-{uuid4().hex}.tmp"
-        )
-
-        self._write_temporary_file(
-            source=source,
-            temporary_path=temporary_path,
         )
 
         backup_created = False
@@ -167,8 +105,8 @@ class DocumentUploadService:
             )
 
         finally:
-            temporary_path.unlink(
-                missing_ok=True
+            self._staging_service.discard(
+                staged_document
             )
 
         document = self._session.scalar(
@@ -194,120 +132,3 @@ class DocumentUploadService:
             ),
             skipped=indexed_chunk_count == 0,
         )
-
-    def _write_temporary_file(
-        self,
-        *,
-        source: BinaryIO,
-        temporary_path: Path,
-    ) -> None:
-        total_bytes = 0
-
-        try:
-            with temporary_path.open("xb") as output:
-                while True:
-                    block = source.read(
-                        READ_BLOCK_SIZE
-                    )
-
-                    if not block:
-                        break
-
-                    if not isinstance(
-                        block,
-                        (
-                            bytes,
-                            bytearray,
-                            memoryview,
-                        ),
-                    ):
-                        raise InvalidUpload(
-                            "上传内容必须是二进制文件"
-                        )
-
-                    total_bytes += len(block)
-
-                    if (
-                        total_bytes
-                        > self._max_upload_bytes
-                    ):
-                        raise UploadTooLarge(
-                            "上传文件超过允许的最大大小"
-                        )
-
-                    output.write(block)
-
-            if total_bytes == 0:
-                raise InvalidUpload(
-                    "上传文件不能为空"
-                )
-
-        except Exception:
-            temporary_path.unlink(
-                missing_ok=True
-            )
-            raise
-
-    @staticmethod
-    def _validate_file_name(
-        file_name: str,
-    ) -> str:
-        normalized = file_name.strip()
-
-        if not normalized:
-            raise InvalidUpload(
-                "上传文件缺少文件名"
-            )
-
-        if len(normalized) > 255:
-            raise InvalidUpload(
-                "上传文件名不能超过255个字符"
-            )
-
-        if normalized in {".", ".."}:
-            raise InvalidUpload(
-                "上传文件名不合法"
-            )
-
-        if (
-            "/" in normalized
-            or "\\" in normalized
-        ):
-            raise InvalidUpload(
-                "上传文件名不能包含路径分隔符"
-            )
-
-        if normalized.endswith("."):
-            raise InvalidUpload(
-                "上传文件名不能以点结尾"
-            )
-
-        if any(
-            ord(character) < 32
-            or character in '<>:"|?*'
-            for character in normalized
-        ):
-            raise InvalidUpload(
-                "上传文件名包含非法字符"
-            )
-
-        device_name = (
-            normalized
-            .split(".", 1)[0]
-            .upper()
-        )
-
-        if device_name in WINDOWS_RESERVED_NAMES:
-            raise InvalidUpload(
-                "上传文件名使用了系统保留名称"
-            )
-
-        suffix = Path(normalized).suffix.lower()
-
-        if suffix not in SUPPORTED_SUFFIXES:
-            raise UnsupportedUploadType(
-                "暂不支持该文件类型："
-                f"{suffix or '无扩展名'}"
-            )
-
-        return normalized
