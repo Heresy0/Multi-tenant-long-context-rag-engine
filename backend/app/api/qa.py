@@ -1,4 +1,3 @@
-import json
 import logging
 from uuid import uuid4
 
@@ -18,6 +17,7 @@ from ..schemas import (
     KnowledgeQuestionRequest,
     KnowledgeQuestionResponse,
 )
+from ..observability import event_message
 from ..security.authorization import (
     AuthorizationDenied,
     AuthorizationService,
@@ -29,20 +29,6 @@ from ..security.principal import Principal
 
 
 logger = logging.getLogger(__name__)
-
-
-def _event_message(
-    event: str,
-    **fields: object,
-) -> str:
-    return json.dumps(
-        {
-            "event": event,
-            **fields,
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
 
 
 router = APIRouter(
@@ -113,7 +99,7 @@ def answer_question(
         )
 
         logger.info(
-            _event_message(
+            event_message(
                 "qa.completed",
                 **common_fields,
                 status_code=200,
@@ -129,7 +115,7 @@ def answer_question(
 
     except AuthorizationDenied as exc:
         logger.warning(
-            _event_message(
+            event_message(
                 "qa.denied",
                 **common_fields,
                 status_code=403,
@@ -146,7 +132,7 @@ def answer_question(
 
     except ValueError as exc:
         logger.warning(
-            _event_message(
+            event_message(
                 "qa.invalid",
                 **common_fields,
                 status_code=422,
@@ -163,7 +149,7 @@ def answer_question(
 
     except Exception as exc:
         logger.exception(
-            _event_message(
+            event_message(
                 "qa.failed",
                 **common_fields,
                 status_code=503,

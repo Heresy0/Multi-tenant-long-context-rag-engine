@@ -19,6 +19,7 @@
 - 可回答性判断、资料引用和拒答机制
 - 文档列表、上传、更新及删除 API
 - 问答阶段耗时、请求 ID 和权限拒绝事件等结构化日志
+- Worker 心跳、索引队列状态和分层健康检查
 - 开发集、独立测试集和答案级离线评估脚本
 - Docker Compose 本地环境及 GitHub Actions 持续集成
 
@@ -176,6 +177,16 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 docker compose logs -f api worker
 ```
 
+健康检查地址：
+
+- `/health/live`：API 进程存活检查
+- `/health/ready`：数据库就绪检查
+- `/health/indexing`：Worker 心跳与索引队列状态
+
+Worker 默认每 10 秒写入一次心跳，30 秒没有新心跳即视为不可用。
+可以通过 `INDEXING_WORKER_HEARTBEAT_SECONDS` 和
+`INDEXING_WORKER_STALE_SECONDS` 调整，但失联阈值至少应为心跳间隔的两倍。
+
 停止服务：
 
 ```powershell
@@ -310,6 +321,9 @@ Authorization: Bearer <access_token>
 | 方法 | 路径 | 最低权限 | 说明 |
 | --- | --- | --- | --- |
 | `GET` | `/health` | 无 | 健康检查 |
+| `GET` | `/health/live` | 无 | API 进程存活检查 |
+| `GET` | `/health/ready` | 无 | 数据库就绪检查 |
+| `GET` | `/health/indexing` | 无 | Worker 心跳和索引队列状态 |
 | `GET` | `/api/knowledge-bases` | 已登录 | 列出当前用户可访问的知识库 |
 | `GET` | `/api/knowledge-bases/{knowledge_base_id}/documents` | viewer | 列出知识库文档 |
 | `POST` | `/api/knowledge-bases/{knowledge_base_id}/documents` | editor | 暂存文档并创建异步索引任务 |

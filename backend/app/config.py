@@ -92,6 +92,18 @@ class Settings:
                 "24",
             )
         )
+        self.indexing_worker_heartbeat_seconds = float(
+            os.getenv(
+                "INDEXING_WORKER_HEARTBEAT_SECONDS",
+                "10",
+            )
+        )
+        self.indexing_worker_stale_seconds = float(
+            os.getenv(
+                "INDEXING_WORKER_STALE_SECONDS",
+                "30",
+            )
+        )
 
         if self.indexing_worker_poll_seconds <= 0:
             raise RuntimeError(
@@ -112,4 +124,18 @@ class Settings:
             raise RuntimeError(
                 "INDEXING_FAILED_FILE_RETENTION_HOURS "
                 "必须大于 0"
+            )
+
+        if self.indexing_worker_heartbeat_seconds <= 0:
+            raise RuntimeError(
+                "INDEXING_WORKER_HEARTBEAT_SECONDS 必须大于 0"
+            )
+
+        if (
+            self.indexing_worker_stale_seconds
+            < self.indexing_worker_heartbeat_seconds * 2
+        ):
+            raise RuntimeError(
+                "INDEXING_WORKER_STALE_SECONDS 至少应为心跳"
+                "间隔的两倍"
             )

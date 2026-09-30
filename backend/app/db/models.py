@@ -711,6 +711,58 @@ class DocumentIndexingJob(TimestampMixin, Base):
     )
 
 
+class IndexingWorkerHeartbeat(TimestampMixin, Base):
+    """索引 Worker 实例的最近存活状态。"""
+
+    __tablename__ = "indexing_worker_heartbeats"
+
+    worker_id: Mapped[str] = mapped_column(
+        String(255),
+        primary_key=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="running",
+        server_default=text("'running'"),
+    )
+
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    last_heartbeat_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    stopped_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    last_error: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'stopped')",
+            name="ck_indexing_worker_heartbeats_status",
+        ),
+        Index(
+            "ix_indexing_worker_heartbeats_status_seen",
+            "status",
+            "last_heartbeat_at",
+        ),
+    )
+
+
 class DocumentChunk(TimestampMixin, Base):
     """文档切分后用于混合检索的内容块。"""
 

@@ -1,8 +1,10 @@
 import logging
+import os
 import signal
+import socket
 import sys
 from pathlib import Path
-from threading import Event
+from threading import Event, Thread
 from time import monotonic
 
 
@@ -18,16 +20,55 @@ from backend.app.db.session import (  # noqa: E402
 from backend.app.document_indexing_worker import (  # noqa: E402
     DocumentIndexingWorker,
 )
+from backend.app.observability import event_message  # noqa: E402
+from backend.app.worker_heartbeat_service import (  # noqa: E402
+    WorkerHeartbeatService,
+)
 
 
 logger = logging.getLogger("backend.app.indexing_worker")
+
+
+def _worker_id() -> str:
+    configured = os.getenv(
+        "INDEXING_WORKER_ID",
+        "",
+    ).strip()
+
+    if configured:
+        return configured
+
+    return socket.gethostname()
+
+
+def _heartbeat_loop(
+    *,
+    stop_event: Event,
+    session_factory,
+    worker_id: str,
+    interval_seconds: float,
+) -> None:
+    while not stop_event.wait(interval_seconds):
+        try:
+            with session_factory() as session:
+                WorkerHeartbeatService(
+                    session=session
+                ).heartbeat(worker_id=worker_id)
+        except Exception as exc:
+            logger.exception(
+                event_message(
+                    "indexing.worker.heartbeat_failed",
+                    worker_id=worker_id,
+                    error_type=type(exc).__name__,
+                )
+            )
 
 
 def main() -> None:
     settings = Settings()
     logging.basicConfig(
         level=settings.log_level,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        format="%(message)s",
     )
     stop_event = Event()
 
@@ -47,6 +88,10 @@ def main() -> None:
     )
     session_factory = create_session_factory(engine)
     verify_database_connection(engine)
+    worker_id = _worker_id()
+    heartbeat_interval = (
+        settings.indexing_worker_heartbeat_seconds
+    )
     poll_seconds = max(
         settings.indexing_worker_poll_seconds,
         0.1,
@@ -61,7 +106,31 @@ def main() -> None:
     )
     last_recovery = float("-inf")
 
-    logger.info("文档索引 Worker 已启动")
+    with session_factory() as session:
+        WorkerHeartbeatService(
+            session=session
+        ).register(worker_id=worker_id)
+
+    heartbeat_thread = Thread(
+        target=_heartbeat_loop,
+        kwargs={
+            "stop_event": stop_event,
+            "session_factory": session_factory,
+            "worker_id": worker_id,
+            "interval_seconds": heartbeat_interval,
+        },
+        name="indexing-worker-heartbeat",
+        daemon=True,
+    )
+    heartbeat_thread.start()
+
+    logger.info(
+        event_message(
+            "indexing.worker.started",
+            worker_id=worker_id,
+            heartbeat_seconds=heartbeat_interval,
+        )
+    )
 
     try:
         while not stop_event.is_set():
@@ -80,8 +149,11 @@ def main() -> None:
 
                     if recovered:
                         logger.warning(
-                            "已恢复超时索引任务：count=%s",
-                            recovered,
+                            event_message(
+                                "indexing.job.recovered",
+                                worker_id=worker_id,
+                                count=recovered,
+                            )
                         )
 
                     cleaned = (
@@ -91,8 +163,11 @@ def main() -> None:
 
                     if cleaned:
                         logger.info(
-                            "已清理过期失败任务候选文件：count=%s",
-                            cleaned,
+                            event_message(
+                                "indexing.candidate.cleaned",
+                                worker_id=worker_id,
+                                count=cleaned,
+                            )
                         )
 
                 processed = worker.run_once()
@@ -101,8 +176,32 @@ def main() -> None:
                 stop_event.wait(poll_seconds)
 
     finally:
+        stop_event.set()
+        heartbeat_thread.join(
+            timeout=heartbeat_interval + 5
+        )
+
+        try:
+            with session_factory() as session:
+                WorkerHeartbeatService(
+                    session=session
+                ).mark_stopped(worker_id=worker_id)
+        except Exception as exc:
+            logger.exception(
+                event_message(
+                    "indexing.worker.stop_failed",
+                    worker_id=worker_id,
+                    error_type=type(exc).__name__,
+                )
+            )
+
         engine.dispose()
-        logger.info("文档索引 Worker 已停止")
+        logger.info(
+            event_message(
+                "indexing.worker.stopped",
+                worker_id=worker_id,
+            )
+        )
 
 
 if __name__ == "__main__":
