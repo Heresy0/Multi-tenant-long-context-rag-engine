@@ -104,6 +104,12 @@ class Settings:
                 "30",
             )
         )
+        self.indexing_worker_metrics_port = int(
+            os.getenv(
+                "INDEXING_WORKER_METRICS_PORT",
+                "9101",
+            )
+        )
 
         if self.indexing_worker_poll_seconds <= 0:
             raise RuntimeError(
@@ -138,4 +144,9 @@ class Settings:
             raise RuntimeError(
                 "INDEXING_WORKER_STALE_SECONDS 至少应为心跳"
                 "间隔的两倍"
+            )
+
+        if not 1 <= self.indexing_worker_metrics_port <= 65535:
+            raise RuntimeError(
+                "INDEXING_WORKER_METRICS_PORT 必须是有效端口"
             )

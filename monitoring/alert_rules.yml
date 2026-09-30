@@ -1,0 +1,38 @@
+groups:
+  - name: enterprise-knowledge
+    rules:
+      - alert: IndexingWorkerUnavailable
+        expr: up{job="enterprise-knowledge-worker"} == 0 or enterprise_indexing_workers_active{job="enterprise-knowledge-api"} < 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 索引 Worker 不可用
+          description: 超过一分钟没有检测到有效的索引 Worker 心跳。
+
+      - alert: IndexingQueueBacklog
+        expr: enterprise_indexing_queue_jobs{job="enterprise-knowledge-api",status="queued"} > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 索引任务持续积压
+          description: 排队中的索引任务连续五分钟超过十个。
+
+      - alert: IndexingFailuresDetected
+        expr: increase(enterprise_indexing_jobs_total{job="enterprise-knowledge-worker",outcome="failed"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: 检测到索引任务最终失败
+          description: 最近十分钟出现了达到重试上限的索引任务。
+
+      - alert: QaP95LatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(enterprise_qa_request_duration_seconds_bucket{job="enterprise-knowledge-api",outcome="completed"}[5m]))) > 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: QA P95 延迟过高
+          description: 知识库问答 P95 延迟连续五分钟超过十五秒。

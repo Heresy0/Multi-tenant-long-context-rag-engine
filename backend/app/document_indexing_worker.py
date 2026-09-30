@@ -18,6 +18,7 @@ from .managed_document_files import (
     ManagedDocumentFileService,
 )
 from .observability import event_message
+from .metrics import record_indexing_job
 from .pgvector_indexing_service import (
     PgVectorIndexingService,
 )
@@ -155,6 +156,12 @@ class DocumentIndexingWorker:
             )
 
         except Exception:
+            record_indexing_job(
+                outcome="status_commit_failed",
+                duration_seconds=(
+                    perf_counter() - started
+                ),
+            )
             logger.exception(
                 "索引已经完成，但任务成功状态提交失败：job_id=%s",
                 job.id,
@@ -172,6 +179,11 @@ class DocumentIndexingWorker:
                 job.id,
             )
 
+        duration_seconds = perf_counter() - started
+        record_indexing_job(
+            outcome="completed",
+            duration_seconds=duration_seconds,
+        )
         logger.info(
             event_message(
                 "indexing.job.completed",
@@ -184,7 +196,7 @@ class DocumentIndexingWorker:
                 attempt_count=job.attempt_count,
                 indexed_chunk_count=indexed_chunk_count,
                 duration_ms=round(
-                    (perf_counter() - started) * 1000,
+                    duration_seconds * 1000,
                     2,
                 ),
             )
@@ -351,6 +363,14 @@ class DocumentIndexingWorker:
         self._update_failed_document_status(
             job=failed_job,
             error=error_message,
+        )
+        record_indexing_job(
+            outcome=(
+                "retry_scheduled"
+                if failed_job.status == "queued"
+                else "failed"
+            ),
+            duration_seconds=duration_ms / 1000,
         )
 
         # 最终失败也保留已经恢复到暂存目录的候选文件，

@@ -5,6 +5,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..indexing_observability_service import (
     IndexingObservabilityService,
 )
+from ..metrics import (
+    record_metrics_refresh_failure,
+    refresh_indexing_metrics,
+    render_metrics,
+)
 from ..system_schemas import (
     IndexingHealthResponse,
     IndexingQueueStatus,
@@ -14,6 +19,37 @@ from ..system_schemas import (
 
 
 router = APIRouter(tags=["system"])
+
+
+@router.get(
+    "/metrics",
+    include_in_schema=False,
+)
+def prometheus_metrics(request: Request) -> Response:
+    """导出 Prometheus 指标；数据库失败时仍返回进程指标。"""
+    try:
+        session_factory: sessionmaker[Session] = (
+            request.app.state.database_session_factory
+        )
+        settings = request.app.state.settings
+
+        with session_factory() as session:
+            snapshot = IndexingObservabilityService(
+                session=session
+            ).snapshot(
+                worker_stale_after_seconds=(
+                    settings.indexing_worker_stale_seconds
+                )
+            )
+        refresh_indexing_metrics(snapshot)
+    except Exception:
+        record_metrics_refresh_failure()
+
+    payload, content_type = render_metrics()
+    return Response(
+        content=payload,
+        media_type=content_type,
+    )
 
 
 @router.get(
