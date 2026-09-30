@@ -7,6 +7,8 @@ from pathlib import Path
 from threading import Event, Thread
 from time import monotonic
 
+from prometheus_client import start_http_server
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -21,6 +23,10 @@ from backend.app.document_indexing_worker import (  # noqa: E402
     DocumentIndexingWorker,
 )
 from backend.app.observability import event_message  # noqa: E402
+from backend.app.metrics import (  # noqa: E402
+    record_cleaned_candidates,
+    record_recovered_jobs,
+)
 from backend.app.worker_heartbeat_service import (  # noqa: E402
     WorkerHeartbeatService,
 )
@@ -88,6 +94,10 @@ def main() -> None:
     )
     session_factory = create_session_factory(engine)
     verify_database_connection(engine)
+    metrics_server, metrics_thread = start_http_server(
+        settings.indexing_worker_metrics_port,
+        addr="0.0.0.0",
+    )
     worker_id = _worker_id()
     heartbeat_interval = (
         settings.indexing_worker_heartbeat_seconds
@@ -129,6 +139,9 @@ def main() -> None:
             "indexing.worker.started",
             worker_id=worker_id,
             heartbeat_seconds=heartbeat_interval,
+            metrics_port=(
+                settings.indexing_worker_metrics_port
+            ),
         )
     )
 
@@ -148,6 +161,7 @@ def main() -> None:
                     last_recovery = monotonic()
 
                     if recovered:
+                        record_recovered_jobs(recovered)
                         logger.warning(
                             event_message(
                                 "indexing.job.recovered",
@@ -162,6 +176,7 @@ def main() -> None:
                     )
 
                     if cleaned:
+                        record_cleaned_candidates(cleaned)
                         logger.info(
                             event_message(
                                 "indexing.candidate.cleaned",
@@ -180,6 +195,9 @@ def main() -> None:
         heartbeat_thread.join(
             timeout=heartbeat_interval + 5
         )
+        metrics_server.shutdown()
+        metrics_server.server_close()
+        metrics_thread.join(timeout=5)
 
         try:
             with session_factory() as session:

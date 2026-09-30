@@ -20,6 +20,7 @@
 - 文档列表、上传、更新及删除 API
 - 问答阶段耗时、请求 ID 和权限拒绝事件等结构化日志
 - Worker 心跳、索引队列状态和分层健康检查
+- Prometheus 指标、告警规则和自动配置的 Grafana 看板
 - 开发集、独立测试集和答案级离线评估脚本
 - Docker Compose 本地环境及 GitHub Actions 持续集成
 
@@ -42,6 +43,8 @@ flowchart LR
     W --> F
     W --> P
     A --> O[结构化日志与耗时指标]
+    O --> M[Prometheus]
+    M --> G[Grafana]
 ```
 
 一条问答请求的大致流程为：
@@ -65,6 +68,7 @@ flowchart LR
 | 文档处理 | PyPDF、python-docx、docx2txt |
 | 测试 | pytest、真实 PostgreSQL 集成测试 |
 | 工程化 | Docker Compose、GitHub Actions |
+| 可观测性 | JSON 日志、Prometheus、Grafana |
 
 ## 目录结构
 
@@ -81,7 +85,8 @@ flowchart LR
 │   ├── datasets/             # 开发集和独立测试集
 │   └── reports/              # 评估报告
 ├── sample_docs/              # 演示文档
-├── compose.yaml              # PostgreSQL、Keycloak 和 API
+├── monitoring/               # Prometheus、告警与 Grafana 配置
+├── compose.yaml              # 应用、依赖服务与监控栈
 ├── Dockerfile                # API 生产镜像入口
 └── requirements.txt
 ```
@@ -170,6 +175,8 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 - Swagger API 文档：<http://127.0.0.1:8000/docs>
 - OpenAPI JSON：<http://127.0.0.1:8000/openapi.json>
 - Keycloak：<http://127.0.0.1:8080>
+- Prometheus：<http://127.0.0.1:9090>
+- Grafana：<http://127.0.0.1:3000>
 
 查看 API 和索引 Worker 日志：
 
@@ -186,6 +193,44 @@ docker compose logs -f api worker
 Worker 默认每 10 秒写入一次心跳，30 秒没有新心跳即视为不可用。
 可以通过 `INDEXING_WORKER_HEARTBEAT_SECONDS` 和
 `INDEXING_WORKER_STALE_SECONDS` 调整，但失联阈值至少应为心跳间隔的两倍。
+
+### Prometheus 与 Grafana
+
+API 在 `/metrics` 导出 Prometheus 文本指标。指标标签只包含请求路由、
+状态和处理结果等低基数字段，不包含租户、用户、问题、文档或任务标识。
+
+Prometheus 每 15 秒抓取一次 API，并加载以下告警：
+
+- 索引 Worker 持续不可用
+- 排队任务持续超过十个
+- 最近十分钟出现最终失败任务
+- QA P95 延迟持续超过十五秒
+
+Grafana 启动时会自动配置 Prometheus 数据源和
+`Enterprise Knowledge RAG` 看板。首次启动前应在 `.env` 中修改：
+
+```env
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=<强密码>
+```
+
+常用指标包括：
+
+```text
+enterprise_http_requests_total
+enterprise_qa_requests_total
+enterprise_qa_request_duration_seconds
+enterprise_qa_stage_duration_seconds
+enterprise_indexing_jobs_total
+enterprise_indexing_job_duration_seconds
+enterprise_indexing_workers_active
+enterprise_indexing_queue_jobs
+enterprise_indexing_oldest_queued_seconds
+```
+
+API 指标由 `api:8000/metrics` 提供；索引执行计数和耗时由 Worker
+内部的 `worker:9101/metrics` 提供。Worker 指标端口只暴露在 Compose
+内部网络，不映射到宿主机。
 
 停止服务：
 
@@ -324,6 +369,7 @@ Authorization: Bearer <access_token>
 | `GET` | `/health/live` | 无 | API 进程存活检查 |
 | `GET` | `/health/ready` | 无 | 数据库就绪检查 |
 | `GET` | `/health/indexing` | 无 | Worker 心跳和索引队列状态 |
+| `GET` | `/metrics` | 无 | Prometheus 指标，仅建议在内网暴露 |
 | `GET` | `/api/knowledge-bases` | 已登录 | 列出当前用户可访问的知识库 |
 | `GET` | `/api/knowledge-bases/{knowledge_base_id}/documents` | viewer | 列出知识库文档 |
 | `POST` | `/api/knowledge-bases/{knowledge_base_id}/documents` | editor | 暂存文档并创建异步索引任务 |
@@ -427,7 +473,7 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 - 将同步文档解析和向量化改为异步任务队列
 - 生产级对象存储和文件病毒扫描
 - Keycloak Realm 自动化配置和密钥管理
-- OpenTelemetry、Prometheus、告警和集中日志
+- OpenTelemetry 分布式追踪、Alertmanager 通知和集中日志平台
 - API 限流、上传频率控制和审计后台
 - 数据库备份、恢复演练和滚动迁移策略
 - 大规模文档下的关键词索引优化和压力测试

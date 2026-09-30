@@ -23,6 +23,7 @@ from backend.app.security.principal import Principal
 from backend.app.security.retrieval_scope import (
     RetrievalScope,
 )
+from backend.app.metrics import REGISTRY
 
 
 TENANT_ID = uuid4()
@@ -202,6 +203,18 @@ def test_qa_returns_answer_with_citations(
         service,
     )
 
+    metric_labels = {
+        "outcome": "completed",
+        "answerable": "true",
+    }
+    metric_before = (
+        REGISTRY.get_sample_value(
+            "enterprise_qa_requests_total",
+            metric_labels,
+        )
+        or 0
+    )
+
     response = client.post(
         "/api/qa",
         json={
@@ -211,6 +224,10 @@ def test_qa_returns_answer_with_citations(
     )
 
     assert response.status_code == 200
+    assert REGISTRY.get_sample_value(
+        "enterprise_qa_requests_total",
+        metric_labels,
+    ) == metric_before + 1
     request_id = response.headers["x-request-id"]
     UUID(request_id)
     assert authorization.sessions == [session]

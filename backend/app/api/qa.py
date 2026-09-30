@@ -1,4 +1,5 @@
 import logging
+from time import perf_counter
 from uuid import uuid4
 
 from fastapi import (
@@ -18,6 +19,7 @@ from ..schemas import (
     KnowledgeQuestionResponse,
 )
 from ..observability import event_message
+from ..metrics import record_qa_request
 from ..security.authorization import (
     AuthorizationDenied,
     AuthorizationService,
@@ -63,6 +65,7 @@ def answer_question(
 ) -> KnowledgeQuestionResponse:
     """在授权知识库范围内执行问答。"""
     request_id = uuid4().hex
+    started = perf_counter()
     response.headers["X-Request-ID"] = request_id
 
     common_fields = {
@@ -108,12 +111,27 @@ def answer_question(
                 **timing_fields,
             )
         )
+        record_qa_request(
+            outcome="completed",
+            answerable=result.answerable,
+            duration_seconds=(
+                perf_counter() - started
+            ),
+            timings=result.timings,
+        )
 
         return KnowledgeQuestionResponse(
             **result.model_dump()
         )
 
     except AuthorizationDenied as exc:
+        record_qa_request(
+            outcome="denied",
+            answerable=None,
+            duration_seconds=(
+                perf_counter() - started
+            ),
+        )
         logger.warning(
             event_message(
                 "qa.denied",
@@ -131,6 +149,13 @@ def answer_question(
         ) from exc
 
     except ValueError as exc:
+        record_qa_request(
+            outcome="invalid",
+            answerable=None,
+            duration_seconds=(
+                perf_counter() - started
+            ),
+        )
         logger.warning(
             event_message(
                 "qa.invalid",
@@ -148,6 +173,13 @@ def answer_question(
         ) from exc
 
     except Exception as exc:
+        record_qa_request(
+            outcome="failed",
+            answerable=None,
+            duration_seconds=(
+                perf_counter() - started
+            ),
+        )
         logger.exception(
             event_message(
                 "qa.failed",

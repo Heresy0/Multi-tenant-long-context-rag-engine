@@ -31,6 +31,7 @@ from backend.app.document_upload_service import (
     DocumentUploadService,
 )
 from backend.app.rag import calculate_source_id
+from backend.app.metrics import REGISTRY
 from backend.app.security.retrieval_scope import RetrievalScope
 
 
@@ -262,6 +263,14 @@ def test_worker_completes_new_document(
         indexing_service=fake_indexing,
     )
 
+    metric_labels = {"outcome": "completed"}
+    metric_before = (
+        REGISTRY.get_sample_value(
+            "enterprise_indexing_jobs_total",
+            metric_labels,
+        )
+        or 0
+    )
     processed = worker.run_once()
 
     session.expire_all()
@@ -279,6 +288,10 @@ def test_worker_completes_new_document(
     )
 
     assert processed is True
+    assert REGISTRY.get_sample_value(
+        "enterprise_indexing_jobs_total",
+        metric_labels,
+    ) == metric_before + 1
     assert document is not None
     assert document.status == "ready"
     assert document.version == 1
@@ -324,7 +337,28 @@ def test_worker_restores_ready_version_and_stops_after_limit(
         indexing_service=fake_indexing,
     )
 
+    retry_labels = {"outcome": "retry_scheduled"}
+    failed_labels = {"outcome": "failed"}
+    retry_before = (
+        REGISTRY.get_sample_value(
+            "enterprise_indexing_jobs_total",
+            retry_labels,
+        )
+        or 0
+    )
+    failed_before = (
+        REGISTRY.get_sample_value(
+            "enterprise_indexing_jobs_total",
+            failed_labels,
+        )
+        or 0
+    )
+
     assert worker.run_once() is True
+    assert REGISTRY.get_sample_value(
+        "enterprise_indexing_jobs_total",
+        retry_labels,
+    ) == retry_before + 1
     session.expire_all()
     first_attempt = session.get(
         DocumentIndexingJob,
@@ -341,6 +375,10 @@ def test_worker_restores_ready_version_and_stops_after_limit(
     )
 
     assert worker.run_once() is True
+    assert REGISTRY.get_sample_value(
+        "enterprise_indexing_jobs_total",
+        failed_labels,
+    ) == failed_before + 1
     session.expire_all()
     failed_job = session.get(
         DocumentIndexingJob,

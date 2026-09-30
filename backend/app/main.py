@@ -18,6 +18,7 @@ from .api.knowledge_bases import (
     router as knowledge_base_router,
 )
 from .security.oidc import OidcTokenVerifier
+from .metrics import observe_http_request
 
 
 def configure_application_logging(
@@ -90,6 +91,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
     )
+
+app.middleware("http")(observe_http_request)
 
 app.include_router(qa_router)
 app.include_router(knowledge_base_router)
