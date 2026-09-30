@@ -84,3 +84,28 @@ def test_table_does_not_lose_data_rows() -> None:
         "其他城市住宿|每晚不超过380元|每晚不超过500元"
         in table_text
     )
+
+
+def test_split_file_can_use_original_candidate_name() -> None:
+    file_path = (
+        DOCUMENT_DIRECTORY
+        / "08_员工与客户服务FAQ.docx"
+    )
+
+    chunks = split_file(
+        file_path,
+        document_name="正式上传文件名",
+    )
+
+    assert chunks
+    assert all(
+        chunk.metadata["document_name"]
+        == "正式上传文件名"
+        for chunk in chunks
+    )
+    assert all(
+        chunk.page_content.startswith(
+            "文档：正式上传文件名\n"
+        )
+        for chunk in chunks
+    )

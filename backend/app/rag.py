@@ -22,15 +22,28 @@ CHUNKING_VERSION = "structured-v1"
 
 def split_file(
     file_path: str | Path,
+    *,
+    document_name: str | None = None,
 ) -> list[Document]:
     path = Path(file_path).resolve()
 
     if path.suffix.lower() == ".docx":
-        return split_docx(path)
+        return split_docx(
+            path,
+            document_name=document_name,
+        )
 
     documents = load_file(path)
     splitter = create_text_splitter()
-    return splitter.split_documents(documents)
+    chunks = splitter.split_documents(documents)
+
+    if document_name is not None:
+        for chunk in chunks:
+            chunk.metadata["document_name"] = (
+                document_name
+            )
+
+    return chunks
 
 
 def create_embeddings(
