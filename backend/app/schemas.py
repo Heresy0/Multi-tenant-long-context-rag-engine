@@ -77,6 +77,10 @@ class DocumentIndexingJobDetail(
     finished_at: datetime | None
 
 
+class DocumentIndexingJobListResponse(BaseModel):
+    items: list[DocumentIndexingJobDetail]
+
+
 class KnowledgeDocumentUploadResponse(BaseModel):
     document: KnowledgeDocumentSummary
     indexing_job: DocumentIndexingJobSummary

@@ -174,6 +174,20 @@ def _job_url(
     )
 
 
+def _job_list_url(context: UploadApiContext) -> str:
+    return (
+        "/api/knowledge-bases/"
+        f"{context.knowledge_base_id}/indexing-jobs"
+    )
+
+
+def _job_retry_url(
+    context: UploadApiContext,
+    job_id: str,
+) -> str:
+    return f"{_job_url(context, job_id)}/retry"
+
+
 def _staged_files(
     context: UploadApiContext,
 ) -> list[Path]:
@@ -420,3 +434,142 @@ def test_editor_can_query_job_but_viewer_cannot(
     assert missing.json() == {
         "detail": "索引任务不存在。",
     }
+
+
+def test_editor_can_list_and_filter_indexing_jobs(
+    api_context: UploadApiContext,
+) -> None:
+    client = TestClient(api_context.app)
+    _set_principal(api_context, api_context.editor)
+    upload = client.post(
+        _upload_url(api_context),
+        files={
+            "file": (
+                "任务列表.txt",
+                b"content",
+                "text/plain",
+            ),
+        },
+    )
+    job_id = upload.json()["indexing_job"]["id"]
+
+    response = client.get(
+        _job_list_url(api_context),
+        params={"status": "queued", "limit": 10},
+    )
+
+    assert response.status_code == 200
+    assert [
+        item["id"]
+        for item in response.json()["items"]
+    ] == [job_id]
+
+    invalid = client.get(
+        _job_list_url(api_context),
+        params={"status": "cancelled"},
+    )
+    assert invalid.status_code == 422
+
+    _set_principal(api_context, api_context.viewer)
+    forbidden = client.get(
+        _job_list_url(api_context)
+    )
+    assert forbidden.status_code == 403
+
+
+def test_editor_can_retry_failed_job_with_retained_file(
+    api_context: UploadApiContext,
+) -> None:
+    client = TestClient(api_context.app)
+    _set_principal(api_context, api_context.editor)
+    upload = client.post(
+        _upload_url(api_context),
+        files={
+            "file": (
+                "人工重试.txt",
+                b"retry-content",
+                "text/plain",
+            ),
+        },
+    )
+    payload = upload.json()
+    job_id = payload["indexing_job"]["id"]
+    document_id = payload["document"]["id"]
+
+    with api_context.session_factory() as session:
+        job = session.get(
+            DocumentIndexingJob,
+            UUID(job_id),
+        )
+        document = session.get(
+            KnowledgeDocument,
+            UUID(document_id),
+        )
+        assert job is not None
+        assert document is not None
+        job.status = "failed"
+        job.attempt_count = job.max_attempts
+        job.last_error = "model unavailable"
+        document.status = "failed"
+        document.last_error = "model unavailable"
+        session.commit()
+
+    response = client.post(
+        _job_retry_url(api_context, job_id)
+    )
+
+    assert response.status_code == 200
+    retried = response.json()
+    assert retried["status"] == "queued"
+    assert retried["attempt_count"] == 0
+    assert retried["last_error"] is None
+
+    with api_context.session_factory() as session:
+        document = session.get(
+            KnowledgeDocument,
+            UUID(document_id),
+        )
+        assert document is not None
+        assert document.status == "pending"
+        assert document.last_error is None
+
+
+def test_retry_rejects_missing_file_and_viewer(
+    api_context: UploadApiContext,
+) -> None:
+    client = TestClient(api_context.app)
+    _set_principal(api_context, api_context.editor)
+    upload = client.post(
+        _upload_url(api_context),
+        files={
+            "file": (
+                "候选丢失.txt",
+                b"content",
+                "text/plain",
+            ),
+        },
+    )
+    job_id = upload.json()["indexing_job"]["id"]
+
+    with api_context.session_factory() as session:
+        job = session.get(
+            DocumentIndexingJob,
+            UUID(job_id),
+        )
+        assert job is not None
+        job.status = "failed"
+        job.attempt_count = job.max_attempts
+        session.commit()
+
+    _staged_files(api_context)[0].unlink()
+    missing = client.post(
+        _job_retry_url(api_context, job_id)
+    )
+    assert missing.status_code == 409
+    assert "重新上传" in missing.json()["detail"]
+
+    _set_principal(api_context, api_context.viewer)
+    forbidden = client.post(
+        _job_retry_url(api_context, job_id)
+    )
+    assert forbidden.status_code == 403

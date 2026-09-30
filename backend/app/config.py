@@ -86,6 +86,12 @@ class Settings:
                 "300",
             )
         )
+        self.indexing_failed_file_retention_hours = float(
+            os.getenv(
+                "INDEXING_FAILED_FILE_RETENTION_HOURS",
+                "24",
+            )
+        )
 
         if self.indexing_worker_poll_seconds <= 0:
             raise RuntimeError(
@@ -100,4 +106,10 @@ class Settings:
         if self.indexing_job_stale_after_seconds <= 0:
             raise RuntimeError(
                 "INDEXING_JOB_STALE_AFTER_SECONDS 必须大于 0"
+            )
+
+        if self.indexing_failed_file_retention_hours <= 0:
+            raise RuntimeError(
+                "INDEXING_FAILED_FILE_RETENTION_HOURS "
+                "必须大于 0"
             )

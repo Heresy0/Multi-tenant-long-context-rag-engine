@@ -259,6 +259,22 @@ GET /api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}
 
 任务状态依次为 `queued`、`running`，最终进入 `succeeded` 或
 `failed`。临时失败会按照任务的最大尝试次数自动重试。
+编辑者还可以查询知识库最近的任务，并按状态或文档过滤：
+
+```text
+GET /api/knowledge-bases/{knowledge_base_id}/indexing-jobs
+GET /api/knowledge-bases/{knowledge_base_id}/indexing-jobs?status=failed
+```
+
+最终失败任务的候选文件默认保留 24 小时。在保留期内排除故障后，
+可以通过以下接口把任务重新加入队列：
+
+```text
+POST /api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}/retry
+```
+
+保留时间由 `INDEXING_FAILED_FILE_RETENTION_HOURS` 控制。超过保留期的
+候选文件会由 Worker 清理，此后需要重新上传原文档。
 
 ### 通过命令行写入单个文件
 
@@ -297,7 +313,9 @@ Authorization: Bearer <access_token>
 | `GET` | `/api/knowledge-bases` | 已登录 | 列出当前用户可访问的知识库 |
 | `GET` | `/api/knowledge-bases/{knowledge_base_id}/documents` | viewer | 列出知识库文档 |
 | `POST` | `/api/knowledge-bases/{knowledge_base_id}/documents` | editor | 暂存文档并创建异步索引任务 |
+| `GET` | `/api/knowledge-bases/{knowledge_base_id}/indexing-jobs` | editor | 列出并过滤文档索引任务 |
 | `GET` | `/api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}` | editor | 查询文档索引任务状态 |
+| `POST` | `/api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}/retry` | editor | 人工重试最终失败任务 |
 | `DELETE` | `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}` | editor | 删除文档、分块和受管文件 |
 | `POST` | `/api/qa` | viewer | 在指定知识库范围内问答 |
 

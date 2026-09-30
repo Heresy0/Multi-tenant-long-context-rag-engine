@@ -2,6 +2,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     status,
     File,
     Request,
@@ -13,7 +14,11 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 
 from ..db.dependencies import get_database_session
-from ..db.models import KnowledgeBase, KnowledgeDocument
+from ..db.models import (
+    DocumentIndexingJob,
+    KnowledgeBase,
+    KnowledgeDocument,
+)
 from ..schemas import (
     KnowledgeBaseListResponse,
     KnowledgeBaseSummary,
@@ -21,6 +26,7 @@ from ..schemas import (
     KnowledgeDocumentSummary,
     KnowledgeDocumentUploadResponse,
     DocumentIndexingJobDetail,
+    DocumentIndexingJobListResponse,
     DocumentIndexingJobSummary,
 )
 from ..security.authorization import (
@@ -40,8 +46,14 @@ from ..document_upload_service import (
 )
 from ..document_indexing_job_service import (
     ActiveDocumentIndexingJobExists,
+    DocumentIndexingJobConflict,
     DocumentIndexingJobNotFound,
     DocumentIndexingJobService,
+    InvalidJobTransition,
+)
+from ..managed_document_files import (
+    ManagedDocumentFileService,
+    ManagedDocumentPathError,
 )
 from ..security.retrieval_scope import RetrievalScope
 
@@ -55,6 +67,26 @@ router = APIRouter(
     prefix="/api/knowledge-bases",
     tags=["knowledge-bases"],
 )
+
+
+def _indexing_job_detail(
+    job: DocumentIndexingJob,
+) -> DocumentIndexingJobDetail:
+    return DocumentIndexingJobDetail(
+        id=job.id,
+        document_id=job.document_id,
+        status=job.status,
+        target_version=job.target_version,
+        attempt_count=job.attempt_count,
+        max_attempts=job.max_attempts,
+        indexed_chunk_count=job.indexed_chunk_count,
+        last_error=job.last_error,
+        available_at=job.available_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+    )
 
 
 @router.get(
@@ -356,23 +388,159 @@ def get_document_indexing_job(
             detail=str(exc),
         ) from exc
 
-    return DocumentIndexingJobDetail(
-        id=job.id,
-        document_id=job.document_id,
-        status=job.status,
-        target_version=job.target_version,
-        attempt_count=job.attempt_count,
-        max_attempts=job.max_attempts,
-        indexed_chunk_count=(
-            job.indexed_chunk_count
-        ),
-        last_error=job.last_error,
-        available_at=job.available_at,
-        started_at=job.started_at,
-        finished_at=job.finished_at,
-        created_at=job.created_at,
-        updated_at=job.updated_at,
+    return _indexing_job_detail(job)
+
+
+@router.get(
+    "/{knowledge_base_id}/indexing-jobs",
+    response_model=DocumentIndexingJobListResponse,
+)
+def list_document_indexing_jobs(
+    knowledge_base_id: UUID,
+    job_status: str | None = Query(
+        default=None,
+        alias="status",
+    ),
+    document_id: UUID | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    principal: Principal = Depends(
+        get_current_principal
+    ),
+    session: Session = Depends(
+        get_database_session
+    ),
+) -> DocumentIndexingJobListResponse:
+    """列出当前知识库中最近的文档索引任务。"""
+    authorization = AuthorizationService(session)
+
+    try:
+        authorization.require_permission(
+            principal=principal,
+            knowledge_base_id=knowledge_base_id,
+            required_permission="editor",
+        )
+    except AuthorizationDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    scope = RetrievalScope(
+        tenant_id=principal.tenant_id,
+        knowledge_base_id=knowledge_base_id,
     )
+
+    try:
+        jobs = DocumentIndexingJobService(
+            session=session
+        ).list_jobs(
+            scope=scope,
+            status=job_status,
+            document_id=document_id,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+    return DocumentIndexingJobListResponse(
+        items=[
+            _indexing_job_detail(job)
+            for job in jobs
+        ]
+    )
+
+
+@router.post(
+    "/{knowledge_base_id}/indexing-jobs/{job_id}/retry",
+    response_model=DocumentIndexingJobDetail,
+)
+def retry_document_indexing_job(
+    knowledge_base_id: UUID,
+    job_id: UUID,
+    request: Request,
+    principal: Principal = Depends(
+        get_current_principal
+    ),
+    session: Session = Depends(
+        get_database_session
+    ),
+) -> DocumentIndexingJobDetail:
+    """把保留了候选文件的最终失败任务重新加入队列。"""
+    authorization = AuthorizationService(session)
+
+    try:
+        authorization.require_permission(
+            principal=principal,
+            knowledge_base_id=knowledge_base_id,
+            required_permission="editor",
+        )
+    except AuthorizationDenied as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    scope = RetrievalScope(
+        tenant_id=principal.tenant_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    service = DocumentIndexingJobService(
+        session=session
+    )
+
+    try:
+        job = service.get(scope=scope, job_id=job_id)
+
+        if job.status != "failed":
+            raise InvalidJobTransition(
+                "只有最终失败的任务可以人工重试。"
+            )
+
+        file_service = ManagedDocumentFileService(
+            storage_dir=(
+                request.app.state.settings
+                .document_storage_dir
+            )
+        )
+
+        def validate_candidate(
+            locked_job: DocumentIndexingJob,
+        ) -> None:
+            file_service.require_staged_candidate(
+                staged_storage_uri=(
+                    locked_job.staged_storage_uri
+                ),
+                scope=scope,
+                expected_content_hash=(
+                    locked_job.candidate_content_hash
+                ),
+            )
+
+        job = service.retry_failed(
+            scope=scope,
+            job_id=job_id,
+            candidate_validator=validate_candidate,
+        )
+    except DocumentIndexingJobNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (
+        DocumentIndexingJobConflict,
+        InvalidJobTransition,
+        FileNotFoundError,
+        ManagedDocumentPathError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return _indexing_job_detail(job)
 
 
 @router.delete(

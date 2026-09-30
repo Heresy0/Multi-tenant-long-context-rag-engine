@@ -617,6 +617,13 @@ class DocumentIndexingJob(TimestampMixin, Base):
         nullable=True,
     )
 
+    staged_candidate_deleted_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     __table_args__ = (
         ForeignKeyConstraint(
             [
@@ -681,6 +688,12 @@ class DocumentIndexingJob(TimestampMixin, Base):
             "knowledge_base_id",
             "document_id",
             "created_at",
+        ),
+        Index(
+            "ix_indexing_jobs_failed_cleanup",
+            "status",
+            "staged_candidate_deleted_at",
+            "finished_at",
         ),
         Index(
             "uq_indexing_jobs_active_document",

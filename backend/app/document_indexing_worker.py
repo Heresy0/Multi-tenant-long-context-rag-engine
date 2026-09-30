@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -167,6 +168,76 @@ class DocumentIndexingWorker:
             )
         )
 
+    def cleanup_expired_failed_candidates(
+        self,
+        *,
+        limit: int = 100,
+    ) -> int:
+        """清理超过保留期的最终失败任务候选文件。"""
+        if not 1 <= limit <= 1000:
+            raise ValueError("limit 必须介于 1 和 1000 之间")
+
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(
+            hours=(
+                self._settings
+                .indexing_failed_file_retention_hours
+            )
+        )
+
+        try:
+            jobs = self._session.scalars(
+                select(DocumentIndexingJob)
+                .where(
+                    DocumentIndexingJob.status == "failed",
+                    DocumentIndexingJob.finished_at
+                    <= cutoff,
+                    DocumentIndexingJob
+                    .staged_candidate_deleted_at
+                    .is_(None),
+                )
+                .order_by(
+                    DocumentIndexingJob.finished_at,
+                    DocumentIndexingJob.id,
+                )
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            ).all()
+
+            cleaned = 0
+
+            for job in jobs:
+                scope = RetrievalScope(
+                    tenant_id=job.tenant_id,
+                    knowledge_base_id=(
+                        job.knowledge_base_id
+                    ),
+                )
+
+                try:
+                    self._file_service.discard_staged_candidate(
+                        staged_storage_uri=(
+                            job.staged_storage_uri
+                        ),
+                        scope=scope,
+                    )
+                except (OSError, ValueError):
+                    logger.exception(
+                        "过期索引候选文件清理失败：job_id=%s",
+                        job.id,
+                    )
+                    continue
+
+                job.staged_candidate_deleted_at = now
+                cleaned += 1
+
+            self._session.commit()
+            return cleaned
+
+        except Exception:
+            self._session.rollback()
+            raise
+
     def _get_document(
         self,
         *,
@@ -216,14 +287,11 @@ class DocumentIndexingWorker:
             str(error).strip()
             or error.__class__.__name__
         )
-        restored = True
-
         if swap is not None:
             try:
                 self._file_service.restore_candidate(swap)
 
             except OSError as restore_error:
-                restored = False
                 error_message = (
                     f"{error_message}; 文件恢复失败："
                     f"{restore_error}"
@@ -252,20 +320,9 @@ class DocumentIndexingWorker:
             error=error_message,
         )
 
-        if failed_job.status == "failed" and restored:
-            try:
-                self._file_service.discard_staged_candidate(
-                    staged_storage_uri=(
-                        job.staged_storage_uri
-                    ),
-                    scope=scope,
-                )
-
-            except (OSError, ValueError):
-                logger.exception(
-                    "终止任务的候选文件清理失败：job_id=%s",
-                    job.id,
-                )
+        # 最终失败也保留已经恢复到暂存目录的候选文件，
+        # 允许管理员排查原因后人工重试。过期文件由后续
+        # 保留期清理阶段处理，不能在这里提前删除。
 
         logger.warning(
             "文档索引任务失败：job_id=%s status=%s error=%s",
