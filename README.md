@@ -244,6 +244,9 @@ POST /api/knowledge-bases/{knowledge_base_id}/documents
 ```
 
 上传操作要求当前用户至少具有目标知识库的 `editor` 权限。
+接口完成安全暂存和任务创建后返回 `202 Accepted`，响应中的
+`indexing_job.id` 是后续查询索引进度的任务标识。文件在任务成功前
+不会覆盖已有的正式版本。
 
 ### 通过命令行写入单个文件
 
@@ -281,7 +284,7 @@ Authorization: Bearer <access_token>
 | `GET` | `/health` | 无 | 健康检查 |
 | `GET` | `/api/knowledge-bases` | 已登录 | 列出当前用户可访问的知识库 |
 | `GET` | `/api/knowledge-bases/{knowledge_base_id}/documents` | viewer | 列出知识库文档 |
-| `POST` | `/api/knowledge-bases/{knowledge_base_id}/documents` | editor | 上传、更新并索引文档 |
+| `POST` | `/api/knowledge-bases/{knowledge_base_id}/documents` | editor | 暂存文档并创建异步索引任务 |
 | `DELETE` | `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}` | editor | 删除文档、分块和受管文件 |
 | `POST` | `/api/qa` | viewer | 在指定知识库范围内问答 |
 

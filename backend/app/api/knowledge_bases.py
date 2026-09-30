@@ -19,7 +19,8 @@ from ..schemas import (
     KnowledgeBaseSummary,
     KnowledgeDocumentListResponse,
     KnowledgeDocumentSummary,
-    KnowledgeDocumentUploadResponse
+    KnowledgeDocumentUploadResponse,
+    DocumentIndexingJobSummary,
 )
 from ..security.authorization import (
     AuthorizationService,
@@ -31,12 +32,13 @@ from ..security.dependencies import (
 from ..security.principal import Principal
 
 from ..document_upload_service import (
+    DocumentUploadConflict,
     DocumentUploadService,
     InvalidUpload,
     UploadTooLarge,
 )
-from ..pgvector_indexing_service import (
-    PgVectorIndexingService,
+from ..document_indexing_job_service import (
+    ActiveDocumentIndexingJobExists,
 )
 from ..security.retrieval_scope import RetrievalScope
 
@@ -193,6 +195,7 @@ def list_knowledge_base_documents(
 @router.post(
     "/{knowledge_base_id}/documents",
     response_model=KnowledgeDocumentUploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 def upload_knowledge_base_document(
     knowledge_base_id: UUID,
@@ -205,7 +208,7 @@ def upload_knowledge_base_document(
         get_database_session
     ),
 ) -> KnowledgeDocumentUploadResponse:
-    """上传文件并写入指定知识库。"""
+    """暂存上传文件并创建异步索引任务。"""
     authorization = AuthorizationService(session)
 
     try:
@@ -228,14 +231,8 @@ def upload_knowledge_base_document(
 
     settings = request.app.state.settings
 
-    indexing_service = PgVectorIndexingService(
-        session=session,
-        settings=settings,
-    )
-
     upload_service = DocumentUploadService(
         session=session,
-        indexing_service=indexing_service,
         storage_dir=settings.document_storage_dir,
         max_upload_bytes=settings.max_upload_bytes,
     )
@@ -260,13 +257,23 @@ def upload_knowledge_base_document(
             detail=str(exc),
         ) from exc
 
+    except (
+        ActiveDocumentIndexingJobExists,
+        DocumentUploadConflict,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="文档入库失败，请稍后重试。",
+            detail="文档上传任务创建失败，请稍后重试。",
         ) from exc
 
     document = result.document
+    indexing_job = result.indexing_job
 
     return KnowledgeDocumentUploadResponse(
         document=KnowledgeDocumentSummary(
@@ -281,10 +288,19 @@ def upload_knowledge_base_document(
             created_at=document.created_at,
             updated_at=document.updated_at,
         ),
-        indexed_chunk_count=(
-            result.indexed_chunk_count
+        indexing_job=DocumentIndexingJobSummary(
+            id=indexing_job.id,
+            status=indexing_job.status,
+            target_version=(
+                indexing_job.target_version
+            ),
+            attempt_count=(
+                indexing_job.attempt_count
+            ),
+            max_attempts=indexing_job.max_attempts,
+            created_at=indexing_job.created_at,
+            updated_at=indexing_job.updated_at,
         ),
-        skipped=result.skipped,
     )
 
 

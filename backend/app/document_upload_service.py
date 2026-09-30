@@ -1,47 +1,56 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .db.models import KnowledgeDocument
+from .db.models import (
+    DocumentIndexingJob,
+    KnowledgeDocument,
+)
+from .document_indexing_job_service import (
+    DocumentIndexingJobService,
+)
 from .document_staging_service import (
     DocumentStagingService,
     InvalidUpload,
     UnsupportedUploadType,
     UploadTooLarge,
 )
-from .pgvector_indexing_service import (
-    PgVectorIndexingService,
-)
+from .rag import calculate_source_id
 from .security.retrieval_scope import RetrievalScope
+
+
+class DocumentUploadConflict(RuntimeError):
+    """同一文档正在创建或处理上传任务。"""
 
 
 @dataclass(frozen=True, slots=True)
 class DocumentUploadResult:
     document: KnowledgeDocument
-    indexed_chunk_count: int
-    skipped: bool
+    indexing_job: DocumentIndexingJob
 
 
 class DocumentUploadService:
-    """安全保存上传文件并写入 pgvector。"""
+    """安全暂存上传文件并创建持久化索引任务。"""
 
     def __init__(
         self,
         *,
         session: Session,
-        indexing_service: PgVectorIndexingService,
         storage_dir: str | Path,
         max_upload_bytes: int,
     ) -> None:
         self._session = session
-        self._indexing_service = indexing_service
         self._staging_service = DocumentStagingService(
             storage_dir=storage_dir,
             max_upload_bytes=max_upload_bytes,
+        )
+        self._job_service = DocumentIndexingJobService(
+            session=session
         )
 
     def upload(
@@ -57,78 +66,129 @@ class DocumentUploadService:
             source=source,
             scope=scope,
         )
-
-        directory = staged_document.target_path.parent
-        target_path = staged_document.target_path
-        temporary_path = staged_document.staged_path
-
-        backup_path = (
-            directory
-            / f".backup-{uuid4().hex}.tmp"
+        source_id = calculate_source_id(
+            staged_document.target_path
+        )
+        final_storage_uri = (
+            staged_document.target_path.as_uri()
         )
 
-        backup_created = False
-        target_installed = False
-
         try:
-            if target_path.exists():
-                target_path.replace(backup_path)
-                backup_created = True
+            document = self._session.scalar(
+                select(KnowledgeDocument)
+                .where(
+                    KnowledgeDocument.tenant_id
+                    == scope.tenant_id,
+                    KnowledgeDocument.knowledge_base_id
+                    == scope.knowledge_base_id,
+                    KnowledgeDocument.source_id
+                    == source_id,
+                )
+                .with_for_update()
+            )
 
-            temporary_path.replace(target_path)
-            target_installed = True
-
-            indexed_chunk_count = (
-                self._indexing_service.index_file(
-                    file_path=target_path,
-                    scope=scope,
+            if document is None:
+                document = KnowledgeDocument(
+                    tenant_id=scope.tenant_id,
+                    knowledge_base_id=(
+                        scope.knowledge_base_id
+                    ),
                     created_by_user_id=(
                         created_by_user_id
                     ),
+                    source_id=source_id,
+                    file_name=(
+                        staged_document.file_name
+                    ),
+                    storage_uri=final_storage_uri,
+                    mime_type=staged_document.mime_type,
+                    content_hash=(
+                        staged_document.content_hash
+                    ),
+                    status="pending",
+                    version=1,
+                    metadata_json={},
                 )
+                self._session.add(document)
+                self._session.flush()
+                target_version = 1
+
+            elif document.status == "ready":
+                candidate_is_unchanged = (
+                    document.file_name
+                    == staged_document.file_name
+                    and document.storage_uri
+                    == final_storage_uri
+                    and document.mime_type
+                    == staged_document.mime_type
+                    and document.content_hash
+                    == staged_document.content_hash
+                )
+                target_version = (
+                    document.version
+                    if candidate_is_unchanged
+                    else document.version + 1
+                )
+
+            else:
+                # 首次索引失败后仍然复用初始版本；此时没有
+                # 可供检索的旧版本需要保留。
+                document.created_by_user_id = (
+                    created_by_user_id
+                )
+                document.file_name = (
+                    staged_document.file_name
+                )
+                document.storage_uri = final_storage_uri
+                document.mime_type = (
+                    staged_document.mime_type
+                )
+                document.content_hash = (
+                    staged_document.content_hash
+                )
+                document.status = "pending"
+                document.last_error = None
+                target_version = document.version
+                self._session.flush()
+
+            indexing_job = self._job_service.create(
+                scope=scope,
+                document_id=document.id,
+                requested_by_user_id=(
+                    created_by_user_id
+                ),
+                staged_storage_uri=(
+                    staged_document.staged_path.as_uri()
+                ),
+                candidate_file_name=(
+                    staged_document.file_name
+                ),
+                candidate_mime_type=(
+                    staged_document.mime_type
+                ),
+                candidate_content_hash=(
+                    staged_document.content_hash
+                ),
+                target_version=target_version,
             )
 
-        except Exception:
-            if target_installed:
-                target_path.unlink(
-                    missing_ok=True
-                )
-
-            if backup_created:
-                backup_path.replace(target_path)
-
-            raise
-
-        else:
-            backup_path.unlink(
-                missing_ok=True
-            )
-
-        finally:
+        except IntegrityError as exc:
+            self._session.rollback()
             self._staging_service.discard(
                 staged_document
             )
+            raise DocumentUploadConflict(
+                "同名文档正在上传，请稍后重试。"
+            ) from exc
 
-        document = self._session.scalar(
-            select(KnowledgeDocument).where(
-                KnowledgeDocument.tenant_id
-                == scope.tenant_id,
-                KnowledgeDocument.knowledge_base_id
-                == scope.knowledge_base_id,
-                KnowledgeDocument.storage_uri
-                == target_path.as_uri(),
+        except Exception:
+            self._session.rollback()
+            self._staging_service.discard(
+                staged_document
             )
-        )
-
-        if document is None:
-            raise RuntimeError(
-                "入库完成但没有找到文档记录"
-            )
+            raise
 
         return DocumentUploadResult(
             document=document,
-            indexed_chunk_count=(
-                indexed_chunk_count
-            ),
-            skipped=indexed_chunk_count == 0,
+            indexing_job=indexing_job,
         )

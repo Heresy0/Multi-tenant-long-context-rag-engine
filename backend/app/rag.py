@@ -131,3 +131,13 @@ def calculate_file_hash(
             hasher.update(data)
 
     return hasher.hexdigest()
+
+
+def calculate_source_id(
+    file_path: str | Path,
+) -> str:
+    """根据正式文件路径生成稳定的文档来源标识。"""
+    path = Path(file_path).resolve()
+    return hashlib.sha256(
+        str(path).lower().encode("utf-8")
+    ).hexdigest()

@@ -19,6 +19,7 @@ from .db.models import (
 from .rag import (
     CHUNKING_VERSION,
     calculate_file_hash,
+    calculate_source_id,
     create_embeddings,
     split_file,
 )
@@ -58,7 +59,7 @@ class PgVectorIndexingService:
     ) -> int:
         path = Path(file_path).resolve()
         file_hash = calculate_file_hash(path)
-        source_id = self._calculate_source_id(path)
+        source_id = calculate_source_id(path)
 
         try:
             current = self._is_current(
@@ -680,12 +681,6 @@ class PgVectorIndexingService:
             )
 
         return records
-
-    @staticmethod
-    def _calculate_source_id(path: Path) -> str:
-        return hashlib.sha256(
-            str(path).lower().encode("utf-8")
-        ).hexdigest()
 
     @staticmethod
     def _validate_embedding(

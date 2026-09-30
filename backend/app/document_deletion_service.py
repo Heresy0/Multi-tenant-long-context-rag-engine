@@ -7,7 +7,10 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db.models import KnowledgeDocument
+from .db.models import (
+    DocumentIndexingJob,
+    KnowledgeDocument,
+)
 from .security.retrieval_scope import RetrievalScope
 
 
@@ -62,6 +65,30 @@ class DocumentDeletionService:
         managed_path = self._managed_file_path(
             document.storage_uri
         )
+        queued_staged_paths: list[Path] = []
+
+        for storage_uri in self._session.scalars(
+            select(
+                DocumentIndexingJob.staged_storage_uri
+            ).where(
+                DocumentIndexingJob.tenant_id
+                == scope.tenant_id,
+                DocumentIndexingJob.knowledge_base_id
+                == scope.knowledge_base_id,
+                DocumentIndexingJob.document_id
+                == document_id,
+            )
+        ).all():
+            queued_staged_path = (
+                self._managed_staging_file_path(
+                    storage_uri
+                )
+            )
+
+            if queued_staged_path is not None:
+                queued_staged_paths.append(
+                    queued_staged_path
+                )
 
         staged_path: Path | None = None
 
@@ -121,6 +148,27 @@ class DocumentDeletionService:
                     staged_path,
                 )
 
+        for queued_staged_path in queued_staged_paths:
+            try:
+                queued_staged_path.unlink(
+                    missing_ok=True
+                )
+
+            except OSError:
+                # 数据库级联删除已经提交，遗留文件交给
+                # 后续的孤儿暂存文件清理任务处理。
+                logger.exception(
+                    "索引任务已删除，但候选文件清理失败：%s",
+                    queued_staged_path,
+                )
+
+            try:
+                queued_staged_path.parent.rmdir()
+
+            except OSError:
+                # 其他文档可能仍有候选文件。
+                pass
+
     def _managed_file_path(
         self,
         storage_uri: str,
@@ -162,3 +210,17 @@ class DocumentDeletionService:
             return None
 
         return local_path
+
+    def _managed_staging_file_path(
+        self,
+        storage_uri: str,
+    ) -> Path | None:
+        path = self._managed_file_path(storage_uri)
+
+        if (
+            path is None
+            or path.parent.name != ".staging"
+        ):
+            return None
+
+        return path
