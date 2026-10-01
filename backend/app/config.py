@@ -23,6 +23,30 @@ class Settings:
         )
         self.database_url = required_env("DATABASE_URL")
 
+        self.redis_url = required_env("REDIS_URL")
+        self.redis_connect_timeout_seconds = float(
+            os.getenv(
+                "REDIS_CONNECT_TIMEOUT_SECONDS",
+                "2",
+            )
+        )
+        self.redis_socket_timeout_seconds = float(
+            os.getenv(
+                "REDIS_SOCKET_TIMEOUT_SECONDS",
+                "2",
+            )
+        )
+
+        if self.redis_connect_timeout_seconds <= 0:
+            raise RuntimeError(
+                "REDIS_CONNECT_TIMEOUT_SECONDS 必须大于 0"
+            )
+
+        if self.redis_socket_timeout_seconds <= 0:
+            raise RuntimeError(
+                "REDIS_SOCKET_TIMEOUT_SECONDS 必须大于 0"
+            )
+
         self.oidc_issuer = required_env("OIDC_ISSUER").rstrip("/")
         self.oidc_audience = required_env("OIDC_AUDIENCE")
         self.oidc_jwks_url = required_env("OIDC_JWKS_URL")

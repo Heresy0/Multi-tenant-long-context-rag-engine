@@ -1,5 +1,6 @@
 # Web API、请求校验、multipart 文件上传与开发服务器
 fastapi==0.141.1
+redis==8.1.0
 uvicorn[standard]==0.52.4
 pydantic==2.13.5
 python-multipart==0.0.32

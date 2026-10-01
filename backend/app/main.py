@@ -20,6 +20,11 @@ from .api.knowledge_bases import (
 from .security.oidc import OidcTokenVerifier
 from .metrics import observe_http_request
 
+from .redis_client import (
+    create_redis_client,
+    verify_redis_connection,
+)
+
 
 def configure_application_logging(
     level_name: str,
@@ -66,6 +71,21 @@ async def lifespan(app: FastAPI):
         stack.callback(database_engine.dispose)
 
         verify_database_connection(database_engine)
+
+        redis_client = create_redis_client(
+            settings.redis_url,
+            connect_timeout_seconds=(
+                settings.redis_connect_timeout_seconds
+            ),
+            socket_timeout_seconds=(
+                settings.redis_socket_timeout_seconds
+            ),
+        )
+
+        stack.callback(redis_client.close)
+        verify_redis_connection(redis_client)
+
+        app.state.redis_client = redis_client
 
         app.state.database_engine = database_engine
         app.state.database_session_factory = (
