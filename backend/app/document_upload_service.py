@@ -1,3 +1,5 @@
+import logging
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -25,7 +27,17 @@ from .document_staging_service import (
     UploadTooLarge,
 )
 from .rag import calculate_source_id
+from .metrics import (
+    record_tenant_upload_quota_rejection,
+)
 from .security.retrieval_scope import RetrievalScope
+from .tenant_document_quota_service import (
+    TenantDocumentQuotaExceeded,
+    TenantDocumentQuotaService,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentUploadConflict(RuntimeError):
@@ -56,6 +68,9 @@ class DocumentUploadService:
         self._job_service = DocumentIndexingJobService(
             session=session
         )
+        self._quota_service = TenantDocumentQuotaService(
+            session
+        )
 
     def upload(
         self,
@@ -79,6 +94,9 @@ class DocumentUploadService:
         )
 
         try:
+            tenant = self._quota_service.lock_tenant(
+                scope.tenant_id
+            )
             document = self._session.scalar(
                 select(KnowledgeDocument)
                 .where(
@@ -90,6 +108,14 @@ class DocumentUploadService:
                     == source_id,
                 )
                 .with_for_update()
+            )
+
+            self._quota_service.require_capacity(
+                tenant=tenant,
+                candidate_size_bytes=(
+                    staged_document.size_bytes
+                ),
+                creates_document=document is None,
             )
 
             if document is None:
@@ -174,6 +200,9 @@ class DocumentUploadService:
                 candidate_content_hash=(
                     staged_document.content_hash
                 ),
+                candidate_size_bytes=(
+                    staged_document.size_bytes
+                ),
                 target_version=target_version,
                 commit=False,
             )
@@ -201,6 +230,38 @@ class DocumentUploadService:
             self._session.refresh(document)
             self._session.refresh(indexing_job)
             log_committed_audit_event(audit_event)
+
+        except TenantDocumentQuotaExceeded as exc:
+            self._session.rollback()
+            self._staging_service.discard(
+                staged_document
+            )
+            record_tenant_upload_quota_rejection(
+                exc.resource
+            )
+            try:
+                AuditService(self._session).record(
+                    tenant_id=scope.tenant_id,
+                    actor_user_id=created_by_user_id,
+                    knowledge_base_id=(
+                        scope.knowledge_base_id
+                    ),
+                    action="document.upload_requested",
+                    resource_type="tenant_quota",
+                    outcome="denied",
+                    request_id=request_id,
+                    details={
+                        "reason": exc.resource,
+                        "limit": exc.limit,
+                        "used": exc.used,
+                        "requested": exc.requested,
+                    },
+                )
+            except Exception:
+                logger.exception(
+                    "租户上传配额拒绝审计写入失败"
+                )
+            raise
 
         except IntegrityError as exc:
             self._session.rollback()

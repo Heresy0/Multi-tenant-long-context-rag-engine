@@ -29,13 +29,19 @@ SENSITIVE_DETAIL_KEYS = frozenset({
     "token",
 })
 SAFE_DETAIL_KEYS = frozenset({
+    "active",
     "answerable",
     "citation_count",
     "document_id",
     "document_version",
     "error_type",
     "indexing_job_id",
+    "limit",
+    "reason",
     "target_version",
+    "requested",
+    "used",
+    "window_seconds",
 })
 
 

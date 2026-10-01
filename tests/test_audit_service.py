@@ -97,6 +97,33 @@ def test_rejects_sensitive_audit_details(
         )
 
 
+def test_accepts_safe_resource_governance_details(
+    session: Session,
+) -> None:
+    event = AuditService(session).record(
+        tenant_id=uuid4(),
+        actor_user_id=uuid4(),
+        knowledge_base_id=uuid4(),
+        action="qa.queried",
+        resource_type="knowledge_base",
+        outcome="denied",
+        details={
+            "reason": "concurrency_limited",
+            "limit": 3,
+            "active": 3,
+            "window_seconds": 60,
+        },
+    )
+
+    assert event.outcome == "denied"
+    assert event.details_json == {
+        "reason": "concurrency_limited",
+        "limit": 3,
+        "active": 3,
+        "window_seconds": 60,
+    }
+
+
 def test_committed_event_emits_searchable_json_log(
     session: Session,
     caplog,

@@ -18,6 +18,7 @@
 - 向量检索、BM25 关键词检索、融合和重排
 - 可回答性判断、资料引用和拒答机制
 - 文档列表、上传、更新及删除 API
+- 租户级问答限流、并发限制及文档数量/存储配额
 - 问答阶段耗时、请求 ID 和权限拒绝事件等结构化日志
 - Loki 集中日志、Grafana 日志检索和跨服务请求关联
 - 事务内审计事件、数据库级防篡改触发器和管理员查询 API
@@ -211,6 +212,9 @@ Worker 默认每 10 秒写入一次心跳，30 秒没有新心跳即视为不可
 
 API 在 `/metrics` 导出 Prometheus 文本指标。指标标签只包含请求路由、
 状态和处理结果等低基数字段，不包含租户、用户、问题、文档或任务标识。
+租户上传配额拒绝通过
+`enterprise_tenant_upload_quota_rejections_total{resource}` 统计，
+`resource` 仅区分 `documents` 与 `storage_bytes`，不会产生高基数标签。
 
 Prometheus 每 15 秒抓取一次 API，并加载以下告警：
 
@@ -404,6 +408,27 @@ POST /api/knowledge-bases/{knowledge_base_id}/documents
 `indexing_job.id` 是后续查询索引进度的任务标识。文件在任务成功前
 不会覆盖已有的正式版本。
 
+每个租户默认最多保存 1000 个文档、占用 10 GiB 文档空间。配额以
+PostgreSQL 为权威账本，同时计算正式文档和仍在排队、执行或失败保留期内的
+候选文件。上传事务会锁定租户记录，因此多个 API 实例同时接收上传也不会
+超卖额度。超额请求返回 `409 Conflict`，并通过
+`X-Tenant-Quota-Resource`、`X-Tenant-Quota-Limit` 和
+`X-Tenant-Quota-Used` 响应头说明触发的限制。
+
+可以直接为不同租户配置不同额度，例如：
+
+```sql
+UPDATE tenants
+SET max_document_count = 2000,
+    max_storage_bytes = 21474836480
+WHERE id = '<tenant UUID>';
+```
+
+索引成功后，候选文件预留会转换为正式文档占用；最终失败的候选文件在保留期
+内仍占用额度，Worker 清理过期候选文件后自动释放。删除文档时，相关正式占用
+和任务预留随数据库级联删除自动释放。历史命令行入库文档可再次运行相同入库
+命令，以幂等方式回填 `file_size_bytes`，不会重复生成向量。
+
 索引任务由独立 Worker 执行。可以使用以下接口查询任务状态：
 
 ```text
@@ -575,7 +600,7 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 - 生产级对象存储和文件病毒扫描
 - Keycloak Realm 自动化配置和密钥管理
 - OpenTelemetry 分布式追踪和跨服务 Trace 上下文
-- API 限流、上传频率控制和可视化审计管理后台
+- 上传频率控制和可视化审计管理后台
 - 数据库备份、恢复演练和滚动迁移策略
 - 大规模文档下的关键词索引优化和压力测试
 - 前端知识库管理与问答界面

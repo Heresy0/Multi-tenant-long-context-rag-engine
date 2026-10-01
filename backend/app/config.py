@@ -50,6 +50,34 @@ class Settings:
             )
         )
 
+        self.qa_max_concurrent_requests_per_tenant = int(
+            os.getenv(
+                "QA_MAX_CONCURRENT_REQUESTS_PER_TENANT",
+                "3",
+            )
+        )
+        self.qa_concurrency_lease_seconds = int(
+            os.getenv(
+                "QA_CONCURRENCY_LEASE_SECONDS",
+                "180",
+            )
+        )
+
+        if (
+            self.qa_max_concurrent_requests_per_tenant
+            < 1
+        ):
+            raise RuntimeError(
+                "QA_MAX_CONCURRENT_REQUESTS_PER_TENANT "
+                "必须是正整数"
+            )
+
+        if self.qa_concurrency_lease_seconds < 1:
+            raise RuntimeError(
+                "QA_CONCURRENCY_LEASE_SECONDS "
+                "必须是正整数"
+            )
+
         if self.qa_rate_limit_requests < 1:
             raise RuntimeError(
                 "QA_RATE_LIMIT_REQUESTS 必须是正整数"

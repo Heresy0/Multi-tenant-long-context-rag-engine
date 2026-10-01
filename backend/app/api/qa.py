@@ -36,6 +36,13 @@ from ..tenant_rate_limiter import (
     TenantRateLimiter,
     TenantRateLimitExceeded,
 )
+from ..tenant_concurrency_limiter import (
+    ConcurrencyDecision,
+    ConcurrencyLease,
+    ConcurrencyLimiterUnavailable,
+    TenantConcurrencyExceeded,
+    TenantConcurrencyLimiter,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +86,29 @@ def rate_limit_headers(
         ),
     }
 
+
+def get_tenant_concurrency_limiter(
+    request: Request,
+) -> TenantConcurrencyLimiter:
+    return (
+        request.app.state
+        .tenant_concurrency_limiter
+    )
+
+
+def concurrency_headers(
+    decision: ConcurrencyDecision,
+) -> dict[str, str]:
+    return {
+        "X-Concurrency-Limit": str(
+            decision.limit
+        ),
+        "X-Concurrency-Remaining": str(
+            decision.remaining
+        ),
+    }
+
+
 @router.post(
     "",
     response_model=KnowledgeQuestionResponse,
@@ -101,6 +131,9 @@ def answer_question(
     ),
     rate_limiter: TenantRateLimiter = Depends(
         get_tenant_rate_limiter
+    ),
+    concurrency_limiter: TenantConcurrencyLimiter = Depends(
+        get_tenant_concurrency_limiter
     ),
 ) -> KnowledgeQuestionResponse:
     """在授权知识库范围内执行问答。"""
@@ -136,6 +169,10 @@ def answer_question(
             details=details,
         )
 
+    concurrency_lease: (
+        ConcurrencyLease | None
+    ) = None
+
     try:
         authorization = AuthorizationService(session)
 
@@ -168,6 +205,42 @@ def answer_question(
 
         for header, value in (
             rate_limit_headers(decision).items()
+        ):
+            response.headers[header] = value
+
+        concurrency_decision = (
+            concurrency_limiter.acquire(
+                tenant_id=principal.tenant_id,
+                resource="qa",
+                limit=(
+                    request.app.state.settings
+                    .qa_max_concurrent_requests_per_tenant
+                ),
+                lease_seconds=(
+                    request.app.state.settings
+                    .qa_concurrency_lease_seconds
+                ),
+            )
+        )
+
+        if not concurrency_decision.allowed:
+            raise TenantConcurrencyExceeded(
+                concurrency_decision
+            )
+
+        concurrency_lease = (
+            concurrency_decision.lease
+        )
+
+        if concurrency_lease is None:
+            raise ConcurrencyLimiterUnavailable(
+                "并发限制服务未返回有效租约。"
+            )
+
+        for header, value in (
+            concurrency_headers(
+                concurrency_decision
+            ).items()
         ):
             response.headers[header] = value
 
@@ -219,8 +292,9 @@ def answer_question(
         decision = exc.decision
 
         commit_audit(
-            outcome="rate_limited",
+            outcome="denied",
             details={
+                "reason": "rate_limited",
                 "limit": decision.limit,
                 "window_seconds": (
                     request.app.state.settings
@@ -350,6 +424,97 @@ def answer_question(
             },
         ) from exc
 
+    except TenantConcurrencyExceeded as exc:
+        decision = exc.decision
+
+        commit_audit(
+            outcome="denied",
+            details={
+                "reason": "concurrency_limited",
+                "limit": decision.limit,
+                "active": decision.active,
+            },
+        )
+
+        record_qa_request(
+            outcome="concurrency_limited",
+            answerable=None,
+            duration_seconds=(
+                perf_counter() - started
+            ),
+        )
+
+        logger.warning(
+            event_message(
+                "qa.concurrency_limited",
+                **common_fields,
+                status_code=429,
+                limit=decision.limit,
+                active=decision.active,
+                retry_after_seconds=(
+                    decision.retry_after_seconds
+                ),
+            )
+        )
+
+        headers = concurrency_headers(decision)
+        headers["Retry-After"] = str(
+            max(
+                decision.retry_after_seconds,
+                1,
+            )
+        )
+        headers["X-Request-ID"] = request_id
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_429_TOO_MANY_REQUESTS
+            ),
+            detail=(
+                "该租户当前正在处理的问答请求"
+                "过多，请稍后重试。"
+            ),
+            headers=headers,
+        ) from exc
+
+    except ConcurrencyLimiterUnavailable as exc:
+        commit_audit(
+            outcome="failed",
+            details={
+                "reason": (
+                    "concurrency_limiter_unavailable"
+                ),
+            },
+        )
+
+        record_qa_request(
+            outcome=(
+                "concurrency_limiter_unavailable"
+            ),
+            answerable=None,
+            duration_seconds=(
+                perf_counter() - started
+            ),
+        )
+
+        logger.error(
+            event_message(
+                "qa.concurrency_limiter_unavailable",
+                **common_fields,
+                status_code=503,
+            )
+        )
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail="并发治理服务暂时不可用。",
+            headers={
+                "X-Request-ID": request_id,
+            },
+        ) from exc
+
     except Exception as exc:
         try:
             commit_audit(
@@ -386,3 +551,17 @@ def answer_question(
                 "X-Request-ID": request_id,
             },
         ) from exc
+
+    finally:
+        if concurrency_lease is not None:
+            try:
+                concurrency_limiter.release(
+                    concurrency_lease
+                )
+            except ConcurrencyLimiterUnavailable:
+                logger.exception(
+                    event_message(
+                        "qa.concurrency_release_failed",
+                        **common_fields,
+                    )
+                )

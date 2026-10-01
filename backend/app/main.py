@@ -26,6 +26,9 @@ from .redis_client import (
 )
 
 from .tenant_rate_limiter import TenantRateLimiter
+from .tenant_concurrency_limiter import (
+    TenantConcurrencyLimiter,
+)
 
 
 def configure_application_logging(
@@ -90,6 +93,9 @@ async def lifespan(app: FastAPI):
         app.state.redis_client = redis_client
         app.state.tenant_rate_limiter = (
             TenantRateLimiter(redis_client)
+        )
+        app.state.tenant_concurrency_limiter = (
+            TenantConcurrencyLimiter(redis_client)
         )
         app.state.database_engine = database_engine
         app.state.database_session_factory = (
