@@ -25,6 +25,7 @@
 - Worker 心跳、索引队列状态和分层健康检查
 - Prometheus 指标、Alertmanager 通知和自动配置的 Grafana 看板
 - 开发集、独立测试集和答案级离线评估脚本
+- Locust 稳定负载、治理压力场景和自动性能基线门禁
 - Docker Compose 本地环境及 GitHub Actions 持续集成
 
 ## 系统架构
@@ -547,6 +548,22 @@ GitHub Actions 会在 Pull Request 和 `main` 分支推送时自动执行：
 5. 运行完整 pytest 测试。
 6. 构建 API Docker 镜像。
 
+## 性能压测与容量基线
+
+项目提供 [Locust 场景](tests/load/locustfile.py) 和自动报告脚本，直接访问正式
+OIDC、权限、限流、并发控制和 QA 链路。支持两种模式：
+
+- `steady`：建立正常负载下的吞吐量、P50、P95、P99、错误率基线；429 算失败。
+- `governance`：刻意超过租户并发上限；429 算预期结果，5xx 仍然算失败。
+
+原始 Locust CSV 和 HTML 写入 `data/load-tests`，不会提交到 Git。汇总脚本会
+生成不包含 JWT、问题正文或租户标识的 JSON 报告，并检查最小请求数、失败率、
+P95、5xx 数量以及治理场景是否真的出现 429。任一门槛不通过时脚本返回非零
+退出码，可直接用作持续集成或发布门禁。
+
+完整准备步骤、PowerShell 命令和推荐参数见
+[tests/load/README.md](tests/load/README.md)。
+
 ## 答案级评估
 
 评估脚本通过受保护的 `/api/qa` 接口运行，因此需要有效的 JWT：
@@ -602,7 +619,7 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 - OpenTelemetry 分布式追踪和跨服务 Trace 上下文
 - 上传频率控制和可视化审计管理后台
 - 数据库备份、恢复演练和滚动迁移策略
-- 大规模文档下的关键词索引优化和压力测试
+- 大规模文档下的关键词索引优化和多节点容量测试
 - 前端知识库管理与问答界面
 
 ## 开发流程

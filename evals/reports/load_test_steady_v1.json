@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-10-01T14:38:04.959324+00:00",
+  "scenario": "steady",
+  "passed": false,
+  "summary": {
+    "request_count": 26,
+    "failure_count": 0,
+    "failure_rate": 0.0,
+    "requests_per_second": 0.14685297891002078,
+    "average_ms": 12508.436246154115,
+    "median_ms": 13000.0,
+    "p95_ms": 18000.0,
+    "p99_ms": 20000.0,
+    "max_ms": 19742.67310000141,
+    "status_counts": {
+      "200": 26
+    },
+    "outcomes": {
+      "200": {
+        "request_count": 26,
+        "failure_count": 0,
+        "average_ms": 12508.436246154115,
+        "median_ms": 13000.0,
+        "p95_ms": 18000.0,
+        "p99_ms": 20000.0,
+        "max_ms": 19742.67310000141
+      }
+    },
+    "server_error_count": 0,
+    "throttled_request_count": 0,
+    "successful_request_count": 26,
+    "successful_p95_ms": 18000.0
+  },
+  "thresholds": {
+    "min_requests": 20,
+    "min_successful_requests": 20,
+    "max_failure_rate": 0.01,
+    "max_p95_ms": 15000.0,
+    "max_server_errors": 0,
+    "min_throttled_requests": 0
+  },
+  "checks": {
+    "minimum_requests": true,
+    "minimum_successful_requests": true,
+    "failure_rate": true,
+    "p95_latency": false,
+    "server_errors": true,
+    "throttled_requests": true
+  }
+}
