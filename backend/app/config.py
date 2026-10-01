@@ -23,6 +23,81 @@ class Settings:
         )
         self.database_url = required_env("DATABASE_URL")
 
+        self.redis_url = required_env("REDIS_URL")
+        self.redis_connect_timeout_seconds = float(
+            os.getenv(
+                "REDIS_CONNECT_TIMEOUT_SECONDS",
+                "2",
+            )
+        )
+        self.redis_socket_timeout_seconds = float(
+            os.getenv(
+                "REDIS_SOCKET_TIMEOUT_SECONDS",
+                "2",
+            )
+        )
+
+        self.qa_rate_limit_requests = int(
+            os.getenv(
+                "QA_RATE_LIMIT_REQUESTS",
+                "60",
+            )
+        )
+        self.qa_rate_limit_window_seconds = int(
+            os.getenv(
+                "QA_RATE_LIMIT_WINDOW_SECONDS",
+                "60",
+            )
+        )
+
+        self.qa_max_concurrent_requests_per_tenant = int(
+            os.getenv(
+                "QA_MAX_CONCURRENT_REQUESTS_PER_TENANT",
+                "3",
+            )
+        )
+        self.qa_concurrency_lease_seconds = int(
+            os.getenv(
+                "QA_CONCURRENCY_LEASE_SECONDS",
+                "180",
+            )
+        )
+
+        if (
+            self.qa_max_concurrent_requests_per_tenant
+            < 1
+        ):
+            raise RuntimeError(
+                "QA_MAX_CONCURRENT_REQUESTS_PER_TENANT "
+                "必须是正整数"
+            )
+
+        if self.qa_concurrency_lease_seconds < 1:
+            raise RuntimeError(
+                "QA_CONCURRENCY_LEASE_SECONDS "
+                "必须是正整数"
+            )
+
+        if self.qa_rate_limit_requests < 1:
+            raise RuntimeError(
+                "QA_RATE_LIMIT_REQUESTS 必须是正整数"
+            )
+
+        if self.qa_rate_limit_window_seconds < 1:
+            raise RuntimeError(
+                "QA_RATE_LIMIT_WINDOW_SECONDS 必须是正整数"
+            )
+
+        if self.redis_connect_timeout_seconds <= 0:
+            raise RuntimeError(
+                "REDIS_CONNECT_TIMEOUT_SECONDS 必须大于 0"
+            )
+
+        if self.redis_socket_timeout_seconds <= 0:
+            raise RuntimeError(
+                "REDIS_SOCKET_TIMEOUT_SECONDS 必须大于 0"
+            )
+
         self.oidc_issuer = required_env("OIDC_ISSUER").rstrip("/")
         self.oidc_audience = required_env("OIDC_AUDIENCE")
         self.oidc_jwks_url = required_env("OIDC_JWKS_URL")

@@ -79,6 +79,11 @@ INDEXING_CLEANED_CANDIDATES = Counter(
     "enterprise_indexing_cleaned_candidates_total",
     "清理的过期候选文件总数。",
 )
+TENANT_UPLOAD_QUOTA_REJECTIONS = Counter(
+    "enterprise_tenant_upload_quota_rejections_total",
+    "租户文档上传因配额不足被拒绝的次数。",
+    ("resource",),
+)
 INDEXING_WORKERS_ACTIVE = Gauge(
     "enterprise_indexing_workers_active",
     "最近仍在发送心跳的索引 Worker 数量。",
@@ -148,6 +153,14 @@ def record_recovered_jobs(count: int) -> None:
 def record_cleaned_candidates(count: int) -> None:
     if count > 0:
         INDEXING_CLEANED_CANDIDATES.inc(count)
+
+
+def record_tenant_upload_quota_rejection(
+    resource: str,
+) -> None:
+    TENANT_UPLOAD_QUOTA_REJECTIONS.labels(
+        resource=resource
+    ).inc()
 
 
 def refresh_indexing_metrics(

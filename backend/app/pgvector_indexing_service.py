@@ -59,6 +59,7 @@ class PgVectorIndexingService:
     ) -> int:
         path = Path(file_path).resolve()
         file_hash = calculate_file_hash(path)
+        file_size_bytes = path.stat().st_size
         source_id = calculate_source_id(path)
 
         try:
@@ -72,6 +73,25 @@ class PgVectorIndexingService:
             self._session.rollback()
 
         if current:
+            try:
+                document = self._find_document(
+                    scope=scope,
+                    source_id=source_id,
+                )
+                if (
+                    document is not None
+                    and document.file_size_bytes
+                    != file_size_bytes
+                ):
+                    document.file_size_bytes = (
+                        file_size_bytes
+                    )
+                    self._session.commit()
+                else:
+                    self._session.rollback()
+            except Exception:
+                self._session.rollback()
+                raise
             return 0
 
         chunks, validated_embeddings = (
@@ -105,6 +125,7 @@ class PgVectorIndexingService:
                         or "application/octet-stream"
                     ),
                     content_hash=file_hash,
+                    file_size_bytes=file_size_bytes,
                     status="pending",
                     version=1,
                     metadata_json={},
@@ -123,6 +144,7 @@ class PgVectorIndexingService:
                     or "application/octet-stream"
                 )
                 document.content_hash = file_hash
+                document.file_size_bytes = file_size_bytes
                 document.status = "pending"
                 document.version += 1
                 document.last_error = None

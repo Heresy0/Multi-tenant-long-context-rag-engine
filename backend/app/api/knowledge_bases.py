@@ -48,6 +48,9 @@ from ..document_upload_service import (
     InvalidUpload,
     UploadTooLarge,
 )
+from ..tenant_document_quota_service import (
+    TenantDocumentQuotaExceeded,
+)
 from ..document_indexing_job_service import (
     ActiveDocumentIndexingJobExists,
     DocumentIndexingJobConflict,
@@ -298,6 +301,17 @@ def upload_knowledge_base_document(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
+        ) from exc
+
+    except TenantDocumentQuotaExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+            headers={
+                "X-Tenant-Quota-Resource": exc.resource,
+                "X-Tenant-Quota-Limit": str(exc.limit),
+                "X-Tenant-Quota-Used": str(exc.used),
+            },
         ) from exc
 
     except (

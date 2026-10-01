@@ -73,22 +73,47 @@ def readiness(
     request: Request,
     response: Response,
 ) -> ReadinessResponse:
-    """确认 API 能够连接数据库。"""
+    """确认 API 能够连接数据库和 Redis。"""
+    database_status = "up"
+    redis_status = "up"
+
     try:
-        with request.app.state.database_engine.connect() as connection:
+        with (
+            request.app.state.database_engine.connect()
+            as connection
+        ):
             connection.execute(text("SELECT 1"))
     except Exception:
+        database_status = "down"
+
+    try:
+        if (
+            request.app.state.redis_client.ping()
+            is not True
+        ):
+            redis_status = "down"
+    except Exception:
+        redis_status = "down"
+
+    if (
+        database_status != "up"
+        or redis_status != "up"
+    ):
         response.status_code = (
             status.HTTP_503_SERVICE_UNAVAILABLE
         )
-        return ReadinessResponse(
-            status="unavailable",
-            database="down",
-        )
 
     return ReadinessResponse(
-        status="ok",
-        database="up",
+        status=(
+            "ok"
+            if (
+                database_status == "up"
+                and redis_status == "up"
+            )
+            else "unavailable"
+        ),
+        database=database_status,
+        redis=redis_status,
     )
 
 

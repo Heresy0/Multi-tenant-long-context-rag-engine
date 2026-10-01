@@ -573,3 +573,40 @@ def test_retry_rejects_missing_file_and_viewer(
         _job_retry_url(api_context, job_id)
     )
     assert forbidden.status_code == 403
+
+
+def test_upload_returns_quota_headers_when_storage_is_full(
+    api_context: UploadApiContext,
+) -> None:
+    with api_context.session_factory() as session:
+        tenant = session.get(Tenant, api_context.tenant_id)
+        assert tenant is not None
+        tenant.max_storage_bytes = 4
+        session.commit()
+
+    _set_principal(api_context, api_context.editor)
+    response = TestClient(api_context.app).post(
+        _upload_url(api_context),
+        files={
+            "file": (
+                "quota.txt",
+                b"12345",
+                "text/plain",
+            ),
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "租户文档存储空间不足。",
+    }
+    assert response.headers[
+        "X-Tenant-Quota-Resource"
+    ] == "storage_bytes"
+    assert response.headers[
+        "X-Tenant-Quota-Limit"
+    ] == "4"
+    assert response.headers[
+        "X-Tenant-Quota-Used"
+    ] == "0"
+    assert _staged_files(api_context) == []

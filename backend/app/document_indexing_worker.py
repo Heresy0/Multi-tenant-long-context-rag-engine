@@ -273,6 +273,7 @@ class DocumentIndexingWorker:
                     continue
 
                 job.staged_candidate_deleted_at = now
+                job.reservation_released_at = now
                 cleaned += 1
 
             self._session.commit()

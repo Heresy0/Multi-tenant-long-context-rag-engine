@@ -21,6 +21,27 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:8.2.10-alpine
+    container_name: enterprise-knowledge-redis
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.4
     container_name: enterprise-knowledge-keycloak
@@ -46,6 +67,7 @@ services:
     env_file:
       - .env
     environment:
+      REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       OIDC_JWKS_URL: http://keycloak:8080/realms/enterprise-knowledge/protocol/openid-connect/certs
       DOCUMENT_STORAGE_DIR: /app/data/documents
@@ -62,6 +84,8 @@ services:
     volumes:
       - enterprise_document_data:/app/data/documents
     depends_on:
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       keycloak:

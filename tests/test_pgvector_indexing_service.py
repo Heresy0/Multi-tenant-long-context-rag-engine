@@ -217,6 +217,7 @@ def test_indexes_file_and_skips_unchanged_file(
 
     assert document is not None
     assert document.status == "ready"
+    assert document.file_size_bytes == file_path.stat().st_size
     assert (
         document.metadata_json["chunk_count"]
         == first_count

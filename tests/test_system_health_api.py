@@ -15,6 +15,16 @@ from backend.app.worker_heartbeat_service import (
 )
 
 
+class HealthyRedis:
+    def ping(self) -> bool:
+        return True
+
+
+class BrokenRedis:
+    def ping(self) -> bool:
+        raise RuntimeError("redis unavailable")
+
+
 @pytest.fixture
 def health_app(tmp_path: Path):
     engine: Engine = create_engine(
@@ -25,6 +35,7 @@ def health_app(tmp_path: Path):
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
     app = FastAPI()
+    app.state.redis_client = HealthyRedis()
     app.state.database_engine = engine
     app.state.database_session_factory = session_factory
     app.state.settings = SimpleNamespace(
@@ -54,6 +65,7 @@ def test_liveness_and_readiness_are_separate(
     assert ready.json() == {
         "status": "ok",
         "database": "up",
+        "redis": "up",
     }
 
 
@@ -94,4 +106,23 @@ def test_readiness_returns_503_when_database_is_down(
     assert response.json() == {
         "status": "unavailable",
         "database": "down",
+        "redis": "up",
+    }
+
+
+def test_readiness_returns_503_when_redis_is_down(
+    health_app,
+) -> None:
+    app, _, _ = health_app
+    app.state.redis_client = BrokenRedis()
+
+    response = TestClient(app).get(
+        "/health/ready"
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "unavailable",
+        "database": "up",
+        "redis": "down",
     }

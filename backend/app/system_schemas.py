@@ -10,6 +10,7 @@ class LivenessResponse(BaseModel):
 class ReadinessResponse(BaseModel):
     status: str
     database: str
+    redis: str
 
 
 class IndexingQueueStatus(BaseModel):

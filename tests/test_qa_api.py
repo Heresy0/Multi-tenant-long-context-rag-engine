@@ -1,5 +1,6 @@
 import json
 import logging
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI
@@ -24,6 +25,15 @@ from backend.app.security.retrieval_scope import (
     RetrievalScope,
 )
 from backend.app.metrics import REGISTRY
+from backend.app.tenant_rate_limiter import (
+    RateLimitDecision,
+    RateLimiterUnavailable,
+)
+from backend.app.tenant_concurrency_limiter import (
+    ConcurrencyDecision,
+    ConcurrencyLease,
+    ConcurrencyLimiterUnavailable,
+)
 
 
 TENANT_ID = uuid4()
@@ -111,17 +121,116 @@ class FakeAuditService:
         return object()
 
 
+class FakeTenantRateLimiter:
+    def __init__(
+        self,
+        *,
+        decision: RateLimitDecision | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.decision = decision or RateLimitDecision(
+            allowed=True,
+            limit=60,
+            remaining=59,
+            reset_after_seconds=60,
+        )
+        self.error = error
+        self.calls: list[dict] = []
+
+    def consume(self, **fields) -> RateLimitDecision:
+        self.calls.append(fields)
+
+        if self.error is not None:
+            raise self.error
+
+        return self.decision
+
+
+class FakeTenantConcurrencyLimiter:
+    def __init__(
+        self,
+        *,
+        decision: ConcurrencyDecision | None = None,
+        acquire_error: Exception | None = None,
+        release_error: Exception | None = None,
+    ) -> None:
+        self.decision = decision or ConcurrencyDecision(
+            allowed=True,
+            limit=3,
+            active=1,
+            remaining=2,
+            retry_after_seconds=0,
+            lease=ConcurrencyLease(
+                tenant_id=TENANT_ID,
+                resource="qa",
+                token="test-lease-token",
+            ),
+        )
+        self.acquire_error = acquire_error
+        self.release_error = release_error
+        self.acquire_calls: list[dict] = []
+        self.release_calls: list[ConcurrencyLease] = []
+
+    def acquire(self, **fields) -> ConcurrencyDecision:
+        self.acquire_calls.append(fields)
+
+        if self.acquire_error is not None:
+            raise self.acquire_error
+
+        return self.decision
+
+    def release(self, lease: ConcurrencyLease) -> bool:
+        self.release_calls.append(lease)
+
+        if self.release_error is not None:
+            raise self.release_error
+
+        return True
+
+
 def create_test_client(
     monkeypatch,
     answer_service: FakeAnswerService,
     *,
     authorization_error: Exception | None = None,
     authenticated: bool = True,
+    rate_limit_decision: (
+        RateLimitDecision | None
+    ) = None,
+    rate_limit_error: Exception | None = None,
+    concurrency_decision: (
+        ConcurrencyDecision | None
+    ) = None,
+    concurrency_error: Exception | None = None,
+    concurrency_release_error: (
+        Exception | None
+    ) = None,
 ) -> tuple[TestClient, FakeAuthorizationService, object]:
     # 使用独立应用，不执行正式项目的 lifespan，
     # 因而不会连接真实模型或数据库。
     app = FastAPI()
     app.state.answer_service = answer_service
+    app.state.settings = SimpleNamespace(
+        qa_rate_limit_requests=60,
+        qa_rate_limit_window_seconds=60,
+        qa_max_concurrent_requests_per_tenant=3,
+        qa_concurrency_lease_seconds=180,
+    )
+    app.state.tenant_rate_limiter = (
+        FakeTenantRateLimiter(
+            decision=rate_limit_decision,
+            error=rate_limit_error,
+        )
+    )
+    app.state.tenant_concurrency_limiter = (
+        FakeTenantConcurrencyLimiter(
+            decision=concurrency_decision,
+            acquire_error=concurrency_error,
+            release_error=(
+                concurrency_release_error
+            ),
+        )
+    )
     app.include_router(router)
     session = object()
     authorization = FakeAuthorizationService(
@@ -237,6 +346,20 @@ def test_qa_returns_answer_with_citations(
     )
 
     assert response.status_code == 200
+    assert response.headers["x-ratelimit-limit"] == "60"
+    assert (
+        response.headers["x-ratelimit-remaining"]
+        == "59"
+    )
+    assert (
+        response.headers["x-ratelimit-reset-after"]
+        == "60"
+    )
+    assert response.headers["x-concurrency-limit"] == "3"
+    assert (
+        response.headers["x-concurrency-remaining"]
+        == "2"
+    )
     assert REGISTRY.get_sample_value(
         "enterprise_qa_requests_total",
         metric_labels,
@@ -253,6 +376,18 @@ def test_qa_returns_answer_with_citations(
         "scope": TEST_SCOPE,
         "session": session,
     }]
+    concurrency_limiter = (
+        client.app.state.tenant_concurrency_limiter
+    )
+    assert concurrency_limiter.acquire_calls == [{
+        "tenant_id": TENANT_ID,
+        "resource": "qa",
+        "limit": 3,
+        "lease_seconds": 180,
+    }]
+    assert concurrency_limiter.release_calls == [
+        concurrency_limiter.decision.lease
+    ]
     assert response.json() == {
         "answer": "抵扣比例为10%。[资料1]",
         "answerable": True,
@@ -310,6 +445,307 @@ def test_qa_returns_answer_with_citations(
     assert "抵扣比例是多少？" not in serialized_event
     assert "抵扣比例为10%" not in serialized_event
     assert "alice" not in serialized_event
+
+
+def test_qa_rejects_request_when_tenant_limit_is_reached(
+    monkeypatch,
+    caplog,
+) -> None:
+    caplog.set_level(
+        logging.WARNING,
+        logger=qa_module.__name__,
+    )
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+        rate_limit_decision=RateLimitDecision(
+            allowed=False,
+            limit=60,
+            remaining=0,
+            reset_after_seconds=17,
+        ),
+    )
+
+    metric_labels = {
+        "outcome": "rate_limited",
+        "answerable": "unknown",
+    }
+    metric_before = (
+        REGISTRY.get_sample_value(
+            "enterprise_qa_requests_total",
+            metric_labels,
+        )
+        or 0
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(
+                KNOWLEDGE_BASE_ID
+            ),
+            "question": "访问令牌有效期是多少？",
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {
+        "detail": (
+            "该租户的问答请求过于频繁，"
+            "请稍后重试。"
+        )
+    }
+    assert response.headers["retry-after"] == "17"
+    assert response.headers["x-ratelimit-limit"] == "60"
+    assert (
+        response.headers["x-ratelimit-remaining"]
+        == "0"
+    )
+    assert (
+        response.headers["x-ratelimit-reset-after"]
+        == "17"
+    )
+    UUID(response.headers["x-request-id"])
+    assert REGISTRY.get_sample_value(
+        "enterprise_qa_requests_total",
+        metric_labels,
+    ) == metric_before + 1
+    assert authorization.calls == [{
+        "principal": TEST_PRINCIPAL,
+        "knowledge_base_id": KNOWLEDGE_BASE_ID,
+    }]
+    assert service.calls == []
+
+    event = find_log_event(
+        caplog,
+        "qa.rate_limited",
+    )
+    assert event["status_code"] == 429
+    assert event["tenant_id"] == str(TENANT_ID)
+    assert event["limit"] == 60
+    assert event["retry_after_seconds"] == 17
+
+
+def test_qa_returns_503_when_rate_limiter_is_unavailable(
+    monkeypatch,
+    caplog,
+) -> None:
+    caplog.set_level(
+        logging.ERROR,
+        logger=qa_module.__name__,
+    )
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+        rate_limit_error=RateLimiterUnavailable(
+            "Redis 限流服务不可用。"
+        ),
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(
+                KNOWLEDGE_BASE_ID
+            ),
+            "question": "访问令牌有效期是多少？",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "请求治理服务暂时不可用。"
+    }
+    UUID(response.headers["x-request-id"])
+    assert authorization.calls == [{
+        "principal": TEST_PRINCIPAL,
+        "knowledge_base_id": KNOWLEDGE_BASE_ID,
+    }]
+    assert service.calls == []
+
+    event = find_log_event(
+        caplog,
+        "qa.rate_limiter_unavailable",
+    )
+    assert event["status_code"] == 503
+    assert event["tenant_id"] == str(TENANT_ID)
+
+
+def test_qa_rejects_request_when_concurrency_limit_is_reached(
+    monkeypatch,
+    caplog,
+) -> None:
+    caplog.set_level(
+        logging.WARNING,
+        logger=qa_module.__name__,
+    )
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+        concurrency_decision=ConcurrencyDecision(
+            allowed=False,
+            limit=3,
+            active=3,
+            remaining=0,
+            retry_after_seconds=12,
+            lease=None,
+        ),
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(
+                KNOWLEDGE_BASE_ID
+            ),
+            "question": "访问令牌有效期是多少？",
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {
+        "detail": (
+            "该租户当前正在处理的问答请求"
+            "过多，请稍后重试。"
+        )
+    }
+    assert response.headers["retry-after"] == "12"
+    assert response.headers["x-concurrency-limit"] == "3"
+    assert (
+        response.headers["x-concurrency-remaining"]
+        == "0"
+    )
+    UUID(response.headers["x-request-id"])
+    assert authorization.calls == [{
+        "principal": TEST_PRINCIPAL,
+        "knowledge_base_id": KNOWLEDGE_BASE_ID,
+    }]
+    assert service.calls == []
+
+    concurrency_limiter = (
+        client.app.state.tenant_concurrency_limiter
+    )
+    assert concurrency_limiter.release_calls == []
+
+    event = find_log_event(
+        caplog,
+        "qa.concurrency_limited",
+    )
+    assert event["status_code"] == 429
+    assert event["tenant_id"] == str(TENANT_ID)
+    assert event["limit"] == 3
+    assert event["active"] == 3
+    assert event["retry_after_seconds"] == 12
+
+
+def test_qa_returns_503_when_concurrency_limiter_is_unavailable(
+    monkeypatch,
+    caplog,
+) -> None:
+    caplog.set_level(
+        logging.ERROR,
+        logger=qa_module.__name__,
+    )
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+        concurrency_error=ConcurrencyLimiterUnavailable(
+            "Redis 并发限制服务不可用。"
+        ),
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(
+                KNOWLEDGE_BASE_ID
+            ),
+            "question": "访问令牌有效期是多少？",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "并发治理服务暂时不可用。"
+    }
+    UUID(response.headers["x-request-id"])
+    assert authorization.calls == [{
+        "principal": TEST_PRINCIPAL,
+        "knowledge_base_id": KNOWLEDGE_BASE_ID,
+    }]
+    assert service.calls == []
+
+    event = find_log_event(
+        caplog,
+        "qa.concurrency_limiter_unavailable",
+    )
+    assert event["status_code"] == 503
+    assert event["tenant_id"] == str(TENANT_ID)
+
+
+def test_qa_release_failure_does_not_replace_successful_answer(
+    monkeypatch,
+    caplog,
+) -> None:
+    caplog.set_level(
+        logging.ERROR,
+        logger=qa_module.__name__,
+    )
+    service = FakeAnswerService(
+        result=AnswerResult(
+            answer="有效期为3600秒。[资料1]",
+            answerable=True,
+            citations=[
+                Citation(
+                    citation_id="资料1",
+                    document_id=(
+                        "00000000-0000-0000-0000-000000000001"
+                    ),
+                    document_name="开放平台手册",
+                    section_path="认证",
+                    chunk_id="chunk-1",
+                )
+            ],
+        )
+    )
+    client, _, _ = create_test_client(
+        monkeypatch,
+        service,
+        concurrency_release_error=(
+            ConcurrencyLimiterUnavailable(
+                "Redis 并发槽位释放失败。"
+            )
+        ),
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(
+                KNOWLEDGE_BASE_ID
+            ),
+            "question": "访问令牌有效期是多少？",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answerable"] is True
+    assert len(service.calls) == 1
+
+    concurrency_limiter = (
+        client.app.state.tenant_concurrency_limiter
+    )
+    assert len(concurrency_limiter.release_calls) == 1
+
+    event = find_log_event(
+        caplog,
+        "qa.concurrency_release_failed",
+    )
+    assert event["tenant_id"] == str(TENANT_ID)
 
 
 def test_qa_returns_normal_refusal_with_http_200(
@@ -478,6 +914,12 @@ def test_qa_converts_unexpected_service_error_to_503(
         "scope": TEST_SCOPE,
         "session": session,
     }]
+    concurrency_limiter = (
+        client.app.state.tenant_concurrency_limiter
+    )
+    assert concurrency_limiter.release_calls == [
+        concurrency_limiter.decision.lease
+    ]
 
     failed = find_log_event(
         caplog,

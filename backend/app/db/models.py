@@ -2,6 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -21,6 +22,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
 EMBEDDING_DIMENSION = 1024
+DEFAULT_TENANT_MAX_DOCUMENT_COUNT = 1000
+DEFAULT_TENANT_MAX_STORAGE_BYTES = 10 * 1024 * 1024 * 1024
 
 from pgvector.sqlalchemy import VECTOR
 
@@ -62,10 +65,36 @@ class Tenant(TimestampMixin, Base):
         default="active",
     )
 
+    max_document_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_TENANT_MAX_DOCUMENT_COUNT,
+        server_default=text(
+            str(DEFAULT_TENANT_MAX_DOCUMENT_COUNT)
+        ),
+    )
+
+    max_storage_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=DEFAULT_TENANT_MAX_STORAGE_BYTES,
+        server_default=text(
+            str(DEFAULT_TENANT_MAX_STORAGE_BYTES)
+        ),
+    )
+
     __table_args__ = (
         CheckConstraint(
             "status IN ('active', 'disabled')",
             name="ck_tenants_status",
+        ),
+        CheckConstraint(
+            "max_document_count >= 1",
+            name="ck_tenants_max_document_count",
+        ),
+        CheckConstraint(
+            "max_storage_bytes >= 1",
+            name="ck_tenants_max_storage_bytes",
         ),
     )
 
@@ -445,6 +474,13 @@ class KnowledgeDocument(TimestampMixin, Base):
         nullable=False,
     )
 
+    file_size_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -504,6 +540,10 @@ class KnowledgeDocument(TimestampMixin, Base):
             "version >= 1",
             name="ck_documents_version",
         ),
+        CheckConstraint(
+            "file_size_bytes >= 0",
+            name="ck_documents_file_size_bytes",
+        ),
         Index(
             "ix_documents_tenant_kb_status",
             "tenant_id",
@@ -562,6 +602,13 @@ class DocumentIndexingJob(TimestampMixin, Base):
     candidate_content_hash: Mapped[str] = mapped_column(
         String(64),
         nullable=False,
+    )
+
+    candidate_size_bytes: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
     )
 
     target_version: Mapped[int] = mapped_column(
@@ -625,6 +672,13 @@ class DocumentIndexingJob(TimestampMixin, Base):
         nullable=True,
     )
 
+    reservation_released_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     __table_args__ = (
         ForeignKeyConstraint(
             [
@@ -677,6 +731,10 @@ class DocumentIndexingJob(TimestampMixin, Base):
             "OR indexed_chunk_count >= 0",
             name="ck_indexing_jobs_chunk_count",
         ),
+        CheckConstraint(
+            "candidate_size_bytes >= 0",
+            name="ck_indexing_jobs_candidate_size_bytes",
+        ),
         Index(
             "ix_indexing_jobs_claim",
             "status",
@@ -695,6 +753,11 @@ class DocumentIndexingJob(TimestampMixin, Base):
             "status",
             "staged_candidate_deleted_at",
             "finished_at",
+        ),
+        Index(
+            "ix_indexing_jobs_tenant_reservation",
+            "tenant_id",
+            "reservation_released_at",
         ),
         Index(
             "uq_indexing_jobs_active_document",

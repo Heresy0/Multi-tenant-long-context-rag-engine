@@ -237,6 +237,7 @@ def _add_ready_document(
         storage_uri=target_path.as_uri(),
         mime_type="text/plain",
         content_hash=sha256(content).hexdigest(),
+        file_size_bytes=len(content),
         status="ready",
         version=1,
         metadata_json={"chunk_count": 1},
@@ -295,11 +296,15 @@ def test_worker_completes_new_document(
     assert document is not None
     assert document.status == "ready"
     assert document.version == 1
+    assert document.file_size_bytes == len(
+        b"new-document"
+    )
     assert document.metadata_json["chunk_count"] == 2
     assert job is not None
     assert job.status == "succeeded"
     assert job.attempt_count == 1
     assert job.indexed_chunk_count == 2
+    assert job.reservation_released_at is not None
     assert target_path.read_bytes() == b"new-document"
     assert fake_indexing.calls == [target_path]
     assert _staged_files(scenario) == []
@@ -392,6 +397,7 @@ def test_worker_restores_ready_version_and_stops_after_limit(
     assert failed_job is not None
     assert failed_job.status == "failed"
     assert failed_job.attempt_count == 2
+    assert failed_job.reservation_released_at is None
     assert stored_document is not None
     assert stored_document.status == "ready"
     assert stored_document.version == 1
@@ -422,6 +428,7 @@ def test_worker_restores_ready_version_and_stops_after_limit(
     )
     assert cleaned_job is not None
     assert cleaned_job.staged_candidate_deleted_at is not None
+    assert cleaned_job.reservation_released_at is not None
     assert _staged_files(scenario) == []
 
 

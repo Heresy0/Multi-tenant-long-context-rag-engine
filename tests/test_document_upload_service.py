@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.db.base import Base
 from backend.app.db.models import (
+    AuditEvent,
     DocumentIndexingJob,
     KnowledgeBase,
     KnowledgeDocument,
@@ -28,6 +29,9 @@ from backend.app.document_upload_service import (
 )
 from backend.app.rag import calculate_source_id
 from backend.app.security.retrieval_scope import RetrievalScope
+from backend.app.tenant_document_quota_service import (
+    TenantDocumentQuotaExceeded,
+)
 
 
 @pytest.fixture
@@ -178,6 +182,13 @@ def test_upload_creates_pending_document_and_queued_job(
     )
     assert result.indexing_job.candidate_content_hash == (
         sha256(content).hexdigest()
+    )
+    assert result.indexing_job.candidate_size_bytes == len(
+        content
+    )
+    assert (
+        result.indexing_job.reservation_released_at
+        is None
     )
 
 
@@ -396,3 +407,103 @@ def test_database_failure_removes_staged_file(
         select(func.count())
         .select_from(KnowledgeDocument)
     ) == 0
+
+
+def test_storage_quota_rejection_discards_candidate_and_audits(
+    session: Session,
+    scope_and_user: tuple[RetrievalScope, UUID],
+    tmp_path: Path,
+) -> None:
+    scope, user_id = scope_and_user
+    tenant = session.get(Tenant, scope.tenant_id)
+    assert tenant is not None
+    tenant.max_storage_bytes = 4
+    session.commit()
+
+    with pytest.raises(
+        TenantDocumentQuotaExceeded,
+        match="存储空间不足",
+    ) as captured:
+        _service(
+            session,
+            tmp_path / "documents",
+        ).upload(
+            file_name="超额.txt",
+            source=BytesIO(b"12345"),
+            scope=scope,
+            created_by_user_id=user_id,
+            request_id="quota-storage-test",
+        )
+
+    assert captured.value.resource == "storage_bytes"
+    assert captured.value.limit == 4
+    assert captured.value.used == 0
+    assert captured.value.requested == 5
+    assert session.scalar(
+        select(func.count()).select_from(
+            KnowledgeDocument
+        )
+    ) == 0
+    assert session.scalar(
+        select(func.count()).select_from(
+            DocumentIndexingJob
+        )
+    ) == 0
+    assert list((tmp_path / "documents").rglob("*.*")) == []
+
+    audit = session.scalar(select(AuditEvent))
+    assert audit is not None
+    assert audit.action == "document.upload_requested"
+    assert audit.outcome == "denied"
+    assert audit.request_id == "quota-storage-test"
+    assert audit.details_json == {
+        "reason": "storage_bytes",
+        "limit": 4,
+        "used": 0,
+        "requested": 5,
+    }
+
+
+def test_document_count_quota_counts_pending_documents(
+    session: Session,
+    scope_and_user: tuple[RetrievalScope, UUID],
+    tmp_path: Path,
+) -> None:
+    scope, user_id = scope_and_user
+    tenant = session.get(Tenant, scope.tenant_id)
+    assert tenant is not None
+    tenant.max_document_count = 1
+    session.commit()
+    service = _service(session, tmp_path / "documents")
+
+    service.upload(
+        file_name="first.txt",
+        source=BytesIO(b"first"),
+        scope=scope,
+        created_by_user_id=user_id,
+    )
+
+    with pytest.raises(
+        TenantDocumentQuotaExceeded,
+        match="文档数量",
+    ) as captured:
+        service.upload(
+            file_name="second.txt",
+            source=BytesIO(b"second"),
+            scope=scope,
+            created_by_user_id=user_id,
+        )
+
+    assert captured.value.resource == "documents"
+    assert captured.value.limit == 1
+    assert captured.value.used == 1
+    assert session.scalar(
+        select(func.count()).select_from(
+            KnowledgeDocument
+        )
+    ) == 1
+    assert session.scalar(
+        select(func.count()).select_from(
+            DocumentIndexingJob
+        )
+    ) == 1

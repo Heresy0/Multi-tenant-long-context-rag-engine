@@ -75,6 +75,7 @@ class DocumentIndexingJobService:
         candidate_mime_type: str,
         candidate_content_hash: str,
         target_version: int,
+        candidate_size_bytes: int = 0,
         max_attempts: int = 3,
         commit: bool = True,
     ) -> DocumentIndexingJob:
@@ -87,6 +88,11 @@ class DocumentIndexingJobService:
         if max_attempts < 1:
             raise ValueError(
                 "max_attempts 必须大于等于 1"
+            )
+
+        if candidate_size_bytes < 0:
+            raise ValueError(
+                "candidate_size_bytes 不能小于 0"
             )
 
         values = {
@@ -165,6 +171,9 @@ class DocumentIndexingJobService:
                 ),
                 candidate_content_hash=(
                     candidate_content_hash
+                ),
+                candidate_size_bytes=(
+                    candidate_size_bytes
                 ),
                 target_version=target_version,
                 status="queued",
@@ -267,12 +276,34 @@ class DocumentIndexingJobService:
             )
 
         try:
+            document = self._session.scalar(
+                select(KnowledgeDocument)
+                .where(
+                    KnowledgeDocument.tenant_id
+                    == scope.tenant_id,
+                    KnowledgeDocument.knowledge_base_id
+                    == scope.knowledge_base_id,
+                    KnowledgeDocument.id
+                    == job.document_id,
+                )
+                .with_for_update()
+            )
+            if document is None:
+                raise DocumentIndexingJobNotFound(
+                    "索引任务对应的文档不存在。"
+                )
+
+            now = self._now()
             job.status = "succeeded"
             job.indexed_chunk_count = (
                 indexed_chunk_count
             )
-            job.finished_at = self._now()
+            job.finished_at = now
             job.last_error = None
+            job.reservation_released_at = now
+            document.file_size_bytes = (
+                job.candidate_size_bytes
+            )
 
             self._session.commit()
             self._session.refresh(job)
