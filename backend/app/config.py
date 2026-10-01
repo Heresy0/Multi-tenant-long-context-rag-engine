@@ -37,6 +37,29 @@ class Settings:
             )
         )
 
+        self.qa_rate_limit_requests = int(
+            os.getenv(
+                "QA_RATE_LIMIT_REQUESTS",
+                "60",
+            )
+        )
+        self.qa_rate_limit_window_seconds = int(
+            os.getenv(
+                "QA_RATE_LIMIT_WINDOW_SECONDS",
+                "60",
+            )
+        )
+
+        if self.qa_rate_limit_requests < 1:
+            raise RuntimeError(
+                "QA_RATE_LIMIT_REQUESTS 必须是正整数"
+            )
+
+        if self.qa_rate_limit_window_seconds < 1:
+            raise RuntimeError(
+                "QA_RATE_LIMIT_WINDOW_SECONDS 必须是正整数"
+            )
+
         if self.redis_connect_timeout_seconds <= 0:
             raise RuntimeError(
                 "REDIS_CONNECT_TIMEOUT_SECONDS 必须大于 0"

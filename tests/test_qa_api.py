@@ -1,5 +1,6 @@
 import json
 import logging
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI
@@ -24,6 +25,10 @@ from backend.app.security.retrieval_scope import (
     RetrievalScope,
 )
 from backend.app.metrics import REGISTRY
+from backend.app.tenant_rate_limiter import (
+    RateLimitDecision,
+    RateLimiterUnavailable,
+)
 
 
 TENANT_ID = uuid4()
@@ -111,17 +116,56 @@ class FakeAuditService:
         return object()
 
 
+class FakeTenantRateLimiter:
+    def __init__(
+        self,
+        *,
+        decision: RateLimitDecision | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.decision = decision or RateLimitDecision(
+            allowed=True,
+            limit=60,
+            remaining=59,
+            reset_after_seconds=60,
+        )
+        self.error = error
+        self.calls: list[dict] = []
+
+    def consume(self, **fields) -> RateLimitDecision:
+        self.calls.append(fields)
+
+        if self.error is not None:
+            raise self.error
+
+        return self.decision
+
+
 def create_test_client(
     monkeypatch,
     answer_service: FakeAnswerService,
     *,
     authorization_error: Exception | None = None,
     authenticated: bool = True,
+    rate_limit_decision: (
+        RateLimitDecision | None
+    ) = None,
+    rate_limit_error: Exception | None = None,
 ) -> tuple[TestClient, FakeAuthorizationService, object]:
     # 使用独立应用，不执行正式项目的 lifespan，
     # 因而不会连接真实模型或数据库。
     app = FastAPI()
     app.state.answer_service = answer_service
+    app.state.settings = SimpleNamespace(
+        qa_rate_limit_requests=60,
+        qa_rate_limit_window_seconds=60,
+    )
+    app.state.tenant_rate_limiter = (
+        FakeTenantRateLimiter(
+            decision=rate_limit_decision,
+            error=rate_limit_error,
+        )
+    )
     app.include_router(router)
     session = object()
     authorization = FakeAuthorizationService(
@@ -237,6 +281,15 @@ def test_qa_returns_answer_with_citations(
     )
 
     assert response.status_code == 200
+    assert response.headers["x-ratelimit-limit"] == "60"
+    assert (
+        response.headers["x-ratelimit-remaining"]
+        == "59"
+    )
+    assert (
+        response.headers["x-ratelimit-reset-after"]
+        == "60"
+    )
     assert REGISTRY.get_sample_value(
         "enterprise_qa_requests_total",
         metric_labels,
@@ -310,6 +363,132 @@ def test_qa_returns_answer_with_citations(
     assert "抵扣比例是多少？" not in serialized_event
     assert "抵扣比例为10%" not in serialized_event
     assert "alice" not in serialized_event
+
+
+def test_qa_rejects_request_when_tenant_limit_is_reached(
+    monkeypatch,
+    caplog,
+) -> None:
+    caplog.set_level(
+        logging.WARNING,
+        logger=qa_module.__name__,
+    )
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+        rate_limit_decision=RateLimitDecision(
+            allowed=False,
+            limit=60,
+            remaining=0,
+            reset_after_seconds=17,
+        ),
+    )
+
+    metric_labels = {
+        "outcome": "rate_limited",
+        "answerable": "unknown",
+    }
+    metric_before = (
+        REGISTRY.get_sample_value(
+            "enterprise_qa_requests_total",
+            metric_labels,
+        )
+        or 0
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(
+                KNOWLEDGE_BASE_ID
+            ),
+            "question": "访问令牌有效期是多少？",
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json() == {
+        "detail": (
+            "该租户的问答请求过于频繁，"
+            "请稍后重试。"
+        )
+    }
+    assert response.headers["retry-after"] == "17"
+    assert response.headers["x-ratelimit-limit"] == "60"
+    assert (
+        response.headers["x-ratelimit-remaining"]
+        == "0"
+    )
+    assert (
+        response.headers["x-ratelimit-reset-after"]
+        == "17"
+    )
+    UUID(response.headers["x-request-id"])
+    assert REGISTRY.get_sample_value(
+        "enterprise_qa_requests_total",
+        metric_labels,
+    ) == metric_before + 1
+    assert authorization.calls == [{
+        "principal": TEST_PRINCIPAL,
+        "knowledge_base_id": KNOWLEDGE_BASE_ID,
+    }]
+    assert service.calls == []
+
+    event = find_log_event(
+        caplog,
+        "qa.rate_limited",
+    )
+    assert event["status_code"] == 429
+    assert event["tenant_id"] == str(TENANT_ID)
+    assert event["limit"] == 60
+    assert event["retry_after_seconds"] == 17
+
+
+def test_qa_returns_503_when_rate_limiter_is_unavailable(
+    monkeypatch,
+    caplog,
+) -> None:
+    caplog.set_level(
+        logging.ERROR,
+        logger=qa_module.__name__,
+    )
+    service = FakeAnswerService()
+    client, authorization, _ = create_test_client(
+        monkeypatch,
+        service,
+        rate_limit_error=RateLimiterUnavailable(
+            "Redis 限流服务不可用。"
+        ),
+    )
+
+    response = client.post(
+        "/api/qa",
+        json={
+            "knowledge_base_id": str(
+                KNOWLEDGE_BASE_ID
+            ),
+            "question": "访问令牌有效期是多少？",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "请求治理服务暂时不可用。"
+    }
+    UUID(response.headers["x-request-id"])
+    assert authorization.calls == [{
+        "principal": TEST_PRINCIPAL,
+        "knowledge_base_id": KNOWLEDGE_BASE_ID,
+    }]
+    assert service.calls == []
+
+    event = find_log_event(
+        caplog,
+        "qa.rate_limiter_unavailable",
+    )
+    assert event["status_code"] == 503
+    assert event["tenant_id"] == str(TENANT_ID)
 
 
 def test_qa_returns_normal_refusal_with_http_200(

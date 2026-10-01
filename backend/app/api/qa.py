@@ -30,6 +30,13 @@ from ..security.dependencies import (
 )
 from ..security.principal import Principal
 
+from ..tenant_rate_limiter import (
+    RateLimitDecision,
+    RateLimiterUnavailable,
+    TenantRateLimiter,
+    TenantRateLimitExceeded,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +60,32 @@ def get_audit_service(
     return AuditService(session)
 
 
+def get_tenant_rate_limiter(
+    request: Request,
+) -> TenantRateLimiter:
+    return request.app.state.tenant_rate_limiter
+
+
+def rate_limit_headers(
+    decision: RateLimitDecision,
+) -> dict[str, str]:
+    return {
+        "X-RateLimit-Limit": str(decision.limit),
+        "X-RateLimit-Remaining": str(
+            decision.remaining
+        ),
+        "X-RateLimit-Reset-After": str(
+            decision.reset_after_seconds
+        ),
+    }
+
 @router.post(
     "",
     response_model=KnowledgeQuestionResponse,
 )
 def answer_question(
     payload: KnowledgeQuestionRequest,
+    request: Request,
     response: Response,
     principal: Principal = Depends(
         get_current_principal
@@ -71,6 +98,9 @@ def answer_question(
     ),
     audit_service: AuditService = Depends(
         get_audit_service
+    ),
+    rate_limiter: TenantRateLimiter = Depends(
+        get_tenant_rate_limiter
     ),
 ) -> KnowledgeQuestionResponse:
     """在授权知识库范围内执行问答。"""
@@ -118,6 +148,29 @@ def answer_question(
             )
         )
 
+        decision = rate_limiter.consume(
+            tenant_id=principal.tenant_id,
+            resource="qa",
+            limit=(
+                request.app.state.settings
+                .qa_rate_limit_requests
+            ),
+            window_seconds=(
+                request.app.state.settings
+                .qa_rate_limit_window_seconds
+            ),
+        )
+
+        if not decision.allowed:
+            raise TenantRateLimitExceeded(
+                decision
+            )
+
+        for header, value in (
+            rate_limit_headers(decision).items()
+        ):
+            response.headers[header] = value
+
         result = answer_service.answer(
             payload.question,
             scope=scope,
@@ -161,6 +214,91 @@ def answer_question(
         return KnowledgeQuestionResponse(
             **result.model_dump()
         )
+
+    except TenantRateLimitExceeded as exc:
+        decision = exc.decision
+
+        commit_audit(
+            outcome="rate_limited",
+            details={
+                "limit": decision.limit,
+                "window_seconds": (
+                    request.app.state.settings
+                    .qa_rate_limit_window_seconds
+                ),
+            },
+        )
+
+        record_qa_request(
+            outcome="rate_limited",
+            answerable=None,
+            duration_seconds=(
+                perf_counter() - started
+            ),
+        )
+
+        logger.warning(
+            event_message(
+                "qa.rate_limited",
+                **common_fields,
+                status_code=429,
+                limit=decision.limit,
+                retry_after_seconds=(
+                    decision.reset_after_seconds
+                ),
+            )
+        )
+
+        headers = rate_limit_headers(decision)
+        headers["Retry-After"] = str(
+            decision.reset_after_seconds
+        )
+        headers["X-Request-ID"] = request_id
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_429_TOO_MANY_REQUESTS
+            ),
+            detail=(
+                "该租户的问答请求过于频繁，"
+                "请稍后重试。"
+            ),
+            headers=headers,
+        ) from exc
+
+    except RateLimiterUnavailable as exc:
+        commit_audit(
+            outcome="failed",
+            details={
+                "reason": "rate_limiter_unavailable",
+            },
+        )
+
+        record_qa_request(
+            outcome="rate_limiter_unavailable",
+            answerable=None,
+            duration_seconds=(
+                perf_counter() - started
+            ),
+        )
+
+        logger.error(
+            event_message(
+                "qa.rate_limiter_unavailable",
+                **common_fields,
+                status_code=503,
+            )
+        )
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail="请求治理服务暂时不可用。",
+            headers={
+                "X-Request-ID": request_id,
+            },
+        ) from exc
 
     except AuthorizationDenied as exc:
         commit_audit(outcome="denied")

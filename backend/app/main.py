@@ -25,6 +25,8 @@ from .redis_client import (
     verify_redis_connection,
 )
 
+from .tenant_rate_limiter import TenantRateLimiter
+
 
 def configure_application_logging(
     level_name: str,
@@ -86,7 +88,9 @@ async def lifespan(app: FastAPI):
         verify_redis_connection(redis_client)
 
         app.state.redis_client = redis_client
-
+        app.state.tenant_rate_limiter = (
+            TenantRateLimiter(redis_client)
+        )
         app.state.database_engine = database_engine
         app.state.database_session_factory = (
             create_session_factory(database_engine)
