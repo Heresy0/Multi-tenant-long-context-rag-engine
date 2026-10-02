@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .db.models import IndexingWorkerHeartbeat
+from ..db.models import IndexingWorkerHeartbeat
 
 
 class WorkerHeartbeatService:

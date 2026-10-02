@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.app.rag import split_file
+from backend.app.knowledge.rag import split_file
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

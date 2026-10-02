@@ -14,14 +14,14 @@ from .answer_models import (
     Citation,
 )
 from .answer_validation import AnswerValidator
-from .config import Settings
+from ..config import Settings
 from .context_builder import (
     BuiltContext,
     ContextBuilder,
 )
 from .prompts import ANSWER_SYSTEM_PROMPT
 from .retrieval_service import RetrievalService
-from .security.retrieval_scope import RetrievalScope
+from ..security.retrieval_scope import RetrievalScope
 
 
 REFUSAL_TEXT = (
@@ -58,8 +58,9 @@ class AnswerService:
             base_url=settings.chat_base_url,
             api_key=settings.chat_api_key,
             temperature=0,
+            reasoning_effort="none",
             timeout=60,
-            max_retries=1,
+            max_retries=0,
         )
 
         self._structured_llm = (

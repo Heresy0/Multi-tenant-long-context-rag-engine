@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from uuid import UUID
 
-from .security.retrieval_scope import RetrievalScope
+from ..security.retrieval_scope import RetrievalScope
 
 
 READ_BLOCK_SIZE = 1024 * 1024

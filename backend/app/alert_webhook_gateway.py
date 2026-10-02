@@ -19,7 +19,7 @@ from prometheus_client import (
 )
 from starlette.responses import Response
 
-from .observability import event_message
+from .monitoring.observability import event_message
 
 
 logger = logging.getLogger(__name__)

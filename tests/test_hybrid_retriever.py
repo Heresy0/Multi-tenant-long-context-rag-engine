@@ -5,7 +5,7 @@ from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field
 
-from backend.app.hybrid_retriever import (
+from backend.app.knowledge.hybrid_retriever import (
     HybridRetriever,
     create_hybrid_retriever,
     document_key,

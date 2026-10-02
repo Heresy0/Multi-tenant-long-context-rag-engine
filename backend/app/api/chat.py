@@ -10,10 +10,10 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, Field
 from fastapi.responses import StreamingResponse
 
-from ..agent import EnterpriseAgent
+from ..legacy.agent import EnterpriseAgent
 from ..config import PROJECT_ROOT, Settings
 from ..schemas import ChatRequest, ChatResponse
-from ..chat_history import ChatHistoryRepository
+from ..legacy.chat_history import ChatHistoryRepository
 
 
 logger = logging.getLogger(__name__)

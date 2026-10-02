@@ -2,7 +2,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from sqlalchemy.orm import Session
 
-from .config import Settings
+from ..config import Settings
 from .hybrid_retriever import (
     create_hybrid_retriever,
 )
@@ -13,7 +13,7 @@ from .pgvector_retriever import (
 from .rag import create_embeddings
 from .reranker import BaseReranker, QwenReranker
 from .rerank_retriever import RerankRetriever
-from .security.retrieval_scope import RetrievalScope
+from ..security.retrieval_scope import RetrievalScope
 from .vector_repository import PgVectorRepository
 
 

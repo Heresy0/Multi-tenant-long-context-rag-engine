@@ -9,10 +9,10 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.db.base import Base
 from backend.app.db.models import DocumentIndexingJob
-from backend.app.indexing_observability_service import (
+from backend.app.monitoring.indexing_observability_service import (
     IndexingObservabilityService,
 )
-from backend.app.worker_heartbeat_service import (
+from backend.app.indexing.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
 

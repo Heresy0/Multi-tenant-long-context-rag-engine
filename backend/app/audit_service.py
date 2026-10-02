@@ -6,7 +6,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from .db.models import AuditEvent
-from .observability import event_message
+from .monitoring.observability import event_message
 
 
 logger = logging.getLogger(__name__)

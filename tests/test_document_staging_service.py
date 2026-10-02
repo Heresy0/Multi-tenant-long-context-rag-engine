@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from backend.app.document_staging_service import (
+from backend.app.documents.document_staging_service import (
     DocumentStagingService,
     InvalidUpload,
     StagedDocument,

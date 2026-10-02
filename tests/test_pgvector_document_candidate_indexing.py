@@ -20,7 +20,7 @@ from backend.app.db.models import (
     Tenant,
     User,
 )
-from backend.app.pgvector_indexing_service import (
+from backend.app.indexing.pgvector_indexing_service import (
     DocumentCandidateNotFound,
     PgVectorIndexingService,
 )

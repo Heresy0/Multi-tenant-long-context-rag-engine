@@ -9,15 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .db.models import (
+from ..db.models import (
     DocumentIndexingJob,
     KnowledgeDocument,
 )
-from .audit_service import (
+from ..audit_service import (
     AuditService,
     log_committed_audit_event,
 )
-from .document_indexing_job_service import (
+from ..indexing.document_indexing_job_service import (
     DocumentIndexingJobService,
 )
 from .document_staging_service import (
@@ -26,12 +26,12 @@ from .document_staging_service import (
     UnsupportedUploadType,
     UploadTooLarge,
 )
-from .rag import calculate_source_id
-from .metrics import (
+from ..knowledge.rag import calculate_source_id
+from ..monitoring.metrics import (
     record_tenant_upload_quota_rejection,
 )
-from .security.retrieval_scope import RetrievalScope
-from .tenant_document_quota_service import (
+from ..security.retrieval_scope import RetrievalScope
+from ..governance.tenant_document_quota_service import (
     TenantDocumentQuotaExceeded,
     TenantDocumentQuotaService,
 )

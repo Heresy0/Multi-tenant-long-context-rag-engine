@@ -1,6 +1,6 @@
 from langchain_core.tools import tool
-from .retrieval_service import RetrievalService
-from .context_builder import ContextBuilder
+from ..knowledge.retrieval_service import RetrievalService
+from ..knowledge.context_builder import ContextBuilder
 
 
 def create_search_knowledge_base_tool(

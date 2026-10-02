@@ -3,7 +3,7 @@ from uuid import UUID
 import pytest
 from redis.exceptions import RedisError
 
-from backend.app.tenant_rate_limiter import (
+from backend.app.governance.tenant_rate_limiter import (
     RateLimiterUnavailable,
     TenantRateLimiter,
 )

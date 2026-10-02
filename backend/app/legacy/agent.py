@@ -2,10 +2,10 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.messages import AIMessageChunk, HumanMessage
 from langchain_openai import ChatOpenAI
-from .prompts import SYSTEM_PROMPT,SUMMARY_PROMPT
+from ..knowledge.prompts import SYSTEM_PROMPT,SUMMARY_PROMPT
 from .tools import create_search_knowledge_base_tool
-from .config import Settings
-from .retrieval_service import RetrievalService
+from ..config import Settings
+from ..knowledge.retrieval_service import RetrievalService
 
 
 class EnterpriseAgent:

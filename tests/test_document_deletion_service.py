@@ -18,7 +18,7 @@ from backend.app.db.models import (
     Tenant,
     User,
 )
-from backend.app.document_deletion_service import (
+from backend.app.documents.document_deletion_service import (
     DocumentDeletionService,
     DocumentNotFoundError,
 )

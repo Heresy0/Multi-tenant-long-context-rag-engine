@@ -1,11 +1,11 @@
 import pytest
 
-from backend.app.answer_models import (
+from backend.app.knowledge.answer_models import (
     AnswerClaim,
     AnswerDraft,
 )
-from backend.app.answer_validation import AnswerValidator
-from backend.app.context_builder import (
+from backend.app.knowledge.answer_validation import AnswerValidator
+from backend.app.knowledge.context_builder import (
     BuiltContext,
     ContextItem,
 )

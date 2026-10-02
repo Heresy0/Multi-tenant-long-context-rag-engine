@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app.api import qa as qa_module
-from backend.app.answer_models import (
+from backend.app.knowledge.answer_models import (
     AnswerResult,
     AnswerTimings,
     Citation,
@@ -24,12 +24,12 @@ from backend.app.security.principal import Principal
 from backend.app.security.retrieval_scope import (
     RetrievalScope,
 )
-from backend.app.metrics import REGISTRY
-from backend.app.tenant_rate_limiter import (
+from backend.app.monitoring.metrics import REGISTRY
+from backend.app.governance.tenant_rate_limiter import (
     RateLimitDecision,
     RateLimiterUnavailable,
 )
-from backend.app.tenant_concurrency_limiter import (
+from backend.app.governance.tenant_concurrency_limiter import (
     ConcurrencyDecision,
     ConcurrencyLease,
     ConcurrencyLimiterUnavailable,

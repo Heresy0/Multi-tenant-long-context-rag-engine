@@ -101,6 +101,10 @@ class Settings:
         self.oidc_issuer = required_env("OIDC_ISSUER").rstrip("/")
         self.oidc_audience = required_env("OIDC_AUDIENCE")
         self.oidc_jwks_url = required_env("OIDC_JWKS_URL")
+        self.oidc_frontend_client_id = (
+            os.getenv("OIDC_FRONTEND_CLIENT_ID", "enterprise-knowledge-web").strip()
+            or "enterprise-knowledge-web"
+        )
 
         self.chat_model = required_env("DASHSCOPE_MODEL")
         self.chat_base_url = required_env("DASHSCOPE_BASE_URL")

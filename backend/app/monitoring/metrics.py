@@ -11,7 +11,7 @@ from prometheus_client import (
     generate_latest,
 )
 
-from .answer_models import AnswerTimings
+from ..knowledge.answer_models import AnswerTimings
 from .indexing_observability_service import (
     IndexingHealthSnapshot,
 )

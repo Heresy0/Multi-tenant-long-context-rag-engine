@@ -25,7 +25,7 @@ from backend.app.security.authorization import (  # noqa: E402
 from backend.app.security.principal import (  # noqa: E402
     Principal,
 )
-from backend.app.pgvector_indexing_service import (  # noqa: E402
+from backend.app.indexing.pgvector_indexing_service import (  # noqa: E402
     PgVectorIndexingService,
 )
 from backend.app.security.retrieval_scope import (  # noqa: E402

@@ -18,18 +18,18 @@ from backend.app.db.models import (
     Tenant,
     User,
 )
-from backend.app.document_indexing_job_service import (
+from backend.app.indexing.document_indexing_job_service import (
     ActiveDocumentIndexingJobExists,
 )
-from backend.app.document_upload_service import (
+from backend.app.documents.document_upload_service import (
     DocumentUploadConflict,
     DocumentUploadService,
     UnsupportedUploadType,
     UploadTooLarge,
 )
-from backend.app.rag import calculate_source_id
+from backend.app.knowledge.rag import calculate_source_id
 from backend.app.security.retrieval_scope import RetrievalScope
-from backend.app.tenant_document_quota_service import (
+from backend.app.governance.tenant_document_quota_service import (
     TenantDocumentQuotaExceeded,
 )
 

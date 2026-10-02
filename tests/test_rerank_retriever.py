@@ -5,9 +5,9 @@ from langchain_core.callbacks import (
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
-from backend.app import reranker as reranker_module
-from backend.app.rerank_retriever import RerankRetriever
-from backend.app.reranker import QwenReranker
+from backend.app.knowledge import reranker as reranker_module
+from backend.app.knowledge.rerank_retriever import RerankRetriever
+from backend.app.knowledge.reranker import QwenReranker
 
 
 class StaticRetriever(BaseRetriever):

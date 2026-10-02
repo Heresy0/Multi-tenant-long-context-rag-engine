@@ -16,7 +16,7 @@ from backend.app.db.models import (
     Tenant,
     User,
 )
-from backend.app.document_indexing_job_service import (
+from backend.app.indexing.document_indexing_job_service import (
     ActiveDocumentIndexingJobExists,
     DocumentIndexingJobConflict,
     DocumentIndexingJobNotFound,

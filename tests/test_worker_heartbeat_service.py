@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from backend.app.db.base import Base
-from backend.app.worker_heartbeat_service import (
+from backend.app.indexing.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
 

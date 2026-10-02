@@ -5,10 +5,11 @@ from contextlib import ExitStack, asynccontextmanager
 from fastapi import FastAPI
 
 from .config import Settings
-from .retrieval_service import RetrievalService
-from .answer_service import AnswerService
+from .knowledge.retrieval_service import RetrievalService
+from .knowledge.answer_service import AnswerService
 from .api.qa import router as qa_router
 from .api.system import router as system_router
+from .api.frontend import router as frontend_router
 from .db.session import (
     create_database_engine,
     create_session_factory,
@@ -18,15 +19,15 @@ from .api.knowledge_bases import (
     router as knowledge_base_router,
 )
 from .security.oidc import OidcTokenVerifier
-from .metrics import observe_http_request
+from .monitoring.metrics import observe_http_request
 
-from .redis_client import (
+from .governance.redis_client import (
     create_redis_client,
     verify_redis_connection,
 )
 
-from .tenant_rate_limiter import TenantRateLimiter
-from .tenant_concurrency_limiter import (
+from .governance.tenant_rate_limiter import TenantRateLimiter
+from .governance.tenant_concurrency_limiter import (
     TenantConcurrencyLimiter,
 )
 
@@ -127,3 +128,4 @@ app.middleware("http")(observe_http_request)
 app.include_router(qa_router)
 app.include_router(knowledge_base_router)
 app.include_router(system_router)
+app.include_router(frontend_router)
