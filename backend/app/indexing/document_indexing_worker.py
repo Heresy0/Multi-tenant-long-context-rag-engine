@@ -5,24 +5,24 @@ from time import perf_counter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .config import Settings
-from .db.models import (
+from ..config import Settings
+from ..db.models import (
     DocumentIndexingJob,
     KnowledgeDocument,
 )
 from .document_indexing_job_service import (
     DocumentIndexingJobService,
 )
-from .managed_document_files import (
+from ..documents.managed_document_files import (
     CandidateFileSwap,
     ManagedDocumentFileService,
 )
-from .observability import event_message
-from .metrics import record_indexing_job
+from ..monitoring.observability import event_message
+from ..monitoring.metrics import record_indexing_job
 from .pgvector_indexing_service import (
     PgVectorIndexingService,
 )
-from .security.retrieval_scope import RetrievalScope
+from ..security.retrieval_scope import RetrievalScope
 
 
 logger = logging.getLogger(__name__)

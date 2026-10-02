@@ -12,7 +12,7 @@ from backend.app.db.session import (  # noqa: E402
     create_database_engine,
     create_session_factory,
 )
-from backend.app.worker_heartbeat_service import (  # noqa: E402
+from backend.app.indexing.worker_heartbeat_service import (  # noqa: E402
     WorkerHeartbeatService,
 )
 

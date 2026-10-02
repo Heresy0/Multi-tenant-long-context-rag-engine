@@ -13,6 +13,7 @@ jobs:
   test:
     name: Test and build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -31,10 +32,22 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
+      redis:
+        image: redis:8.2.10-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
     env:
       DATABASE_URL: >-
         postgresql+psycopg://enterprise_app:enterprise_test@127.0.0.1:5432/enterprise_knowledge_test
       RUN_POSTGRES_INTEGRATION_TESTS: "1"
+      REDIS_URL: redis://127.0.0.1:6379/0
+      RUN_REDIS_INTEGRATION_TESTS: "1"
 
     steps:
       - name: Checkout
@@ -53,6 +66,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
+
+      - name: Set up Node for frontend tests
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Check frontend JavaScript and authentication
+        run: |
+          node --check backend/app/static/app.js
+          node --check backend/app/static/auth.js
+          node --test tests/frontend/auth.test.mjs
 
       - name: Compile
         run: python -m compileall backend scripts

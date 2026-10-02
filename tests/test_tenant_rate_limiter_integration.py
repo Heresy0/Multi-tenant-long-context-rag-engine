@@ -8,11 +8,11 @@ import pytest
 from redis import Redis
 
 from backend.app.config import required_env
-from backend.app.redis_client import (
+from backend.app.governance.redis_client import (
     create_redis_client,
     verify_redis_connection,
 )
-from backend.app.tenant_rate_limiter import (
+from backend.app.governance.tenant_rate_limiter import (
     TenantRateLimiter,
 )
 

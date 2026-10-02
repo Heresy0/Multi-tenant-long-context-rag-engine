@@ -18,10 +18,10 @@ from backend.app.db.models import (
 from backend.app.security.retrieval_scope import (
     RetrievalScope,
 )
-from backend.app.vector_repository import (
+from backend.app.knowledge.vector_repository import (
     PgVectorRepository,
 )
-from backend.app.pgvector_indexing_service import (
+from backend.app.indexing.pgvector_indexing_service import (
     PgVectorIndexingService,
 )
 from langchain_core.embeddings import Embeddings

@@ -11,11 +11,11 @@ from sqlalchemy.pool import StaticPool
 from backend.app.api.system import router
 from backend.app.db.base import Base
 from backend.app.db.session import create_session_factory
-from backend.app.metrics import (
+from backend.app.monitoring.metrics import (
     REGISTRY,
     observe_http_request,
 )
-from backend.app.worker_heartbeat_service import (
+from backend.app.indexing.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
 

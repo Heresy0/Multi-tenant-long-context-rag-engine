@@ -2,10 +2,10 @@ from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-from ..indexing_observability_service import (
+from ..monitoring.indexing_observability_service import (
     IndexingObservabilityService,
 )
-from ..metrics import (
+from ..monitoring.metrics import (
     record_metrics_refresh_failure,
     refresh_indexing_metrics,
     render_metrics,

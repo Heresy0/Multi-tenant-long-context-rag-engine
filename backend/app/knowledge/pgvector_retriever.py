@@ -6,7 +6,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.retrievers import BaseRetriever
 from pydantic import ConfigDict, Field
 
-from .security.retrieval_scope import RetrievalScope
+from ..security.retrieval_scope import RetrievalScope
 from .vector_repository import (
     PgVectorRepository,
     StoredChunk,

@@ -42,29 +42,29 @@ from ..security.dependencies import (
 )
 from ..security.principal import Principal
 
-from ..document_upload_service import (
+from ..documents.document_upload_service import (
     DocumentUploadConflict,
     DocumentUploadService,
     InvalidUpload,
     UploadTooLarge,
 )
-from ..tenant_document_quota_service import (
+from ..governance.tenant_document_quota_service import (
     TenantDocumentQuotaExceeded,
 )
-from ..document_indexing_job_service import (
+from ..indexing.document_indexing_job_service import (
     ActiveDocumentIndexingJobExists,
     DocumentIndexingJobConflict,
     DocumentIndexingJobNotFound,
     DocumentIndexingJobService,
     InvalidJobTransition,
 )
-from ..managed_document_files import (
+from ..documents.managed_document_files import (
     ManagedDocumentFileService,
     ManagedDocumentPathError,
 )
 from ..security.retrieval_scope import RetrievalScope
 
-from ..document_deletion_service import (
+from ..documents.document_deletion_service import (
     DocumentDeletionService,
     DocumentNotFoundError,
 )

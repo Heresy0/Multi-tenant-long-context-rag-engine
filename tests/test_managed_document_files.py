@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from backend.app.managed_document_files import (
+from backend.app.documents.managed_document_files import (
     ManagedDocumentFileService,
     ManagedDocumentPathError,
 )

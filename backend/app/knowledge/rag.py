@@ -12,9 +12,9 @@ from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
 )
 
-from .config import Settings
-from .db.models import EMBEDDING_DIMENSION
-from .document_splitter import split_docx
+from ..config import Settings
+from ..db.models import EMBEDDING_DIMENSION
+from ..documents.document_splitter import split_docx
 
 
 CHUNKING_VERSION = "structured-v1"

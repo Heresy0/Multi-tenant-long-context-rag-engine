@@ -12,15 +12,15 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from ..answer_service import AnswerService
+from ..knowledge.answer_service import AnswerService
 from ..audit_service import AuditService
 from ..db.dependencies import get_database_session
 from ..schemas import (
     KnowledgeQuestionRequest,
     KnowledgeQuestionResponse,
 )
-from ..observability import event_message
-from ..metrics import record_qa_request
+from ..monitoring.observability import event_message
+from ..monitoring.metrics import record_qa_request
 from ..security.authorization import (
     AuthorizationDenied,
     AuthorizationService,
@@ -30,13 +30,13 @@ from ..security.dependencies import (
 )
 from ..security.principal import Principal
 
-from ..tenant_rate_limiter import (
+from ..governance.tenant_rate_limiter import (
     RateLimitDecision,
     RateLimiterUnavailable,
     TenantRateLimiter,
     TenantRateLimitExceeded,
 )
-from ..tenant_concurrency_limiter import (
+from ..governance.tenant_concurrency_limiter import (
     ConcurrencyDecision,
     ConcurrencyLease,
     ConcurrencyLimiterUnavailable,

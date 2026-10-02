@@ -6,15 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .db.models import (
+from ..db.models import (
     DocumentIndexingJob,
     KnowledgeDocument,
 )
-from .audit_service import (
+from ..audit_service import (
     AuditService,
     log_committed_audit_event,
 )
-from .security.retrieval_scope import RetrievalScope
+from ..security.retrieval_scope import RetrievalScope
 
 
 ACTIVE_STATUSES = (

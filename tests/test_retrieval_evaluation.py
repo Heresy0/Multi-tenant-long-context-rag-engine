@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from backend.app.document_splitter import split_docx
+from backend.app.documents.document_splitter import split_docx
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

@@ -3,7 +3,7 @@ from uuid import UUID
 import pytest
 from redis.exceptions import RedisError
 
-from backend.app.tenant_concurrency_limiter import (
+from backend.app.governance.tenant_concurrency_limiter import (
     ConcurrencyLease,
     ConcurrencyLimiterUnavailable,
     TenantConcurrencyLimiter,

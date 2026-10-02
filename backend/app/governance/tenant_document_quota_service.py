@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .db.models import (
+from ..db.models import (
     DocumentIndexingJob,
     KnowledgeDocument,
     Tenant,

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.app.answer_models import (
+from backend.app.knowledge.answer_models import (
     AnswerClaim,
     AnswerDraft,
     AnswerResult,

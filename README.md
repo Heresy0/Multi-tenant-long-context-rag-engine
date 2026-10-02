@@ -27,6 +27,10 @@
 - 开发集、独立测试集和答案级离线评估脚本
 - Locust 稳定负载、治理压力场景和自动性能基线门禁
 - Docker Compose 本地环境及 GitHub Actions 持续集成
+- 同源浏览器工作台，支持企业登录、知识问答、文档管理及索引任务状态查看
+
+演示与收尾验收步骤见 [演示验收指南](docs/DEMO.md)。项目当前面向功能演示和
+技术方案验证，不将小样本评估结果或单机压测结果等同于生产级服务承诺。
 
 ## 系统架构
 
@@ -342,6 +346,71 @@ docker compose down
 
 `docker compose down` 不会删除数据库和文档卷。只有明确需要清空本地数据时，才使用 `docker compose down --volumes`。
 
+## 浏览器工作台
+
+API 启动后打开 <http://127.0.0.1:8000/>，即可使用内置的“知序”工作台。
+页面使用原生 HTML / CSS / JavaScript，由 FastAPI 同源提供，Docker 镜像自动包含
+静态资源，无需 Node.js、前端构建或额外容器。`3000` 端口仍为 Grafana。
+
+- 选择当前账号有权访问的知识库，提交问题并查看答案、引用和耗时。
+- 查看文档的索引状态、版本、分块数量和更新时间。
+- editor / admin 可上传和删除文档、查看索引任务、重试失败任务。
+- 上传返回 202 后，页面每 5 秒刷新活动任务；任务完成后文档可用于问答。
+- viewer 仅可查看和提问。所有权限仍由 API 校验，前端显示不替代服务端授权。
+
+初次体验可点击“登录工作空间”，展开“已有访问令牌？临时登录”，粘贴现有
+Alice / Bob Access Token。令牌仅保存在页面内存中，刷新后需要重新登录；过期时会
+提示重新登录。问题和答案也只保留在当前页面，切换知识库或退出时清空。
+
+使用企业账号直接登录前，需要在 Keycloak 的 `enterprise-knowledge` Realm
+创建一个浏览器 public client：
+
+1. Client ID：`enterprise-knowledge-web`（对应 `.env` 中可选的
+   `OIDC_FRONTEND_CLIENT_ID`，默认使用此名称）。
+2. Client authentication：Off；Standard flow：On；Implicit flow 和 Direct access grants：Off。
+3. Valid redirect URIs：`http://127.0.0.1:8000/`。
+4. Valid post logout redirect URIs：`http://127.0.0.1:8000/`。
+5. Web origins：`http://127.0.0.1:8000`。
+6. 当前 Keycloak 26.7.4 界面：Settings → Capability config → Require PKCE：On，
+   PKCE Method：`S256`，保存客户端配置。其他版本可能使用不同字段名称。
+7. Client scopes → `enterprise-knowledge-web-dedicated` → Mappers →
+   Configure a new mapper（已有映射时从 Add mapper 菜单进入）→ Audience。
+   Name 可填 `enterprise-api-audience`；Included Client Audience 必须从下拉列表
+   **点击选中** `enterprise-knowledge-api`（与 `OIDC_AUDIENCE` 一致），
+   Included Custom Audience 留空，Add to access token：On，Add to ID token：Off。
+   保存后重新打开映射，确认 Audience 的值不是空白。
+
+以上 public client、重定向与来源配置遵循
+[Keycloak 浏览器应用说明](https://www.keycloak.org/securing-apps/javascript-adapter)。
+前端使用授权码 + PKCE S256，不接收用户密码、不使用 client secret；Keycloak 返回
+Token 后仍由原有 JWT 验证和数据库权限链路鉴权。浏览器登录支持自动续期，Token
+仅在内存中保存，sessionStorage 只暂存一次性登录 state 和 PKCE verifier。
+生产环境需将登录回调、登出回调、Web origins 和 `OIDC_ISSUER` 改为对应 HTTPS 地址。
+
+若登录回到工作台后仍出现“访问令牌无效或已过期”，该提示也可能表示 audience、
+issuer 或签名公钥校验失败，不一定是真的过期。优先核对上述 Audience 映射；修改
+映射后必须刷新页面并重新登录以取得新令牌，不要关闭后端校验或粘贴令牌到公共网站。
+
+更新 Docker 页面与 API：
+
+```powershell
+docker compose up -d --build api worker
+```
+
+本机 `--reload` 运行时刷新页面即可。前端接口及安全头测试可执行：
+
+```powershell
+python -m pytest tests/test_frontend_api.py -q
+```
+
+若本机已有 Node.js 24，可额外运行无依赖的登录逻辑测试（CI 也会执行）：
+
+```powershell
+node --test tests/frontend/auth.test.mjs
+```
+
+Node.js 仅用于开发测试；部署和运行工作台不需要安装 Node.js。
+
 ## 不使用容器运行 API
 
 PostgreSQL 和 Keycloak 仍可通过 Docker 启动，API 在本机虚拟环境中运行：
@@ -620,7 +689,7 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 - 上传频率控制和可视化审计管理后台
 - 数据库备份、恢复演练和滚动迁移策略
 - 大规模文档下的关键词索引优化和多节点容量测试
-- 前端知识库管理与问答界面
+- 前端会话持久化、知识库管理后台与更多交互功能
 
 ## 开发流程
 

@@ -4,11 +4,11 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .db.models import (
+from ..db.models import (
     DocumentIndexingJob,
     IndexingWorkerHeartbeat,
 )
-from .worker_heartbeat_service import (
+from ..indexing.worker_heartbeat_service import (
     WorkerHeartbeatService,
 )
 

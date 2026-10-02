@@ -8,16 +8,16 @@ from langchain_core.messages import (
 )
 import pytest
 
-from backend.app import answer_service as service_module
-from backend.app.answer_models import (
+from backend.app.knowledge import answer_service as service_module
+from backend.app.knowledge.answer_models import (
     AnswerClaim,
     AnswerDraft,
 )
-from backend.app.answer_service import (
+from backend.app.knowledge.answer_service import (
     REFUSAL_TEXT,
     AnswerService,
 )
-from backend.app.prompts import ANSWER_SYSTEM_PROMPT
+from backend.app.knowledge.prompts import ANSWER_SYSTEM_PROMPT
 from backend.app.security.retrieval_scope import (
     RetrievalScope,
 )
@@ -178,8 +178,9 @@ def test_initializes_structured_model_with_expected_settings(
         "base_url": "https://example.com/v1",
         "api_key": "test-key",
         "temperature": 0,
+        "reasoning_effort": "none",
         "timeout": 60,
-        "max_retries": 1,
+        "max_retries": 0,
     }]
     assert chat_model.schemas == [AnswerDraft]
 

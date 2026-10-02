@@ -1,6 +1,6 @@
 from uuid import UUID
 from pydantic import BaseModel, Field
-from .answer_models import AnswerResult
+from .knowledge.answer_models import AnswerResult
 from datetime import datetime
 
 

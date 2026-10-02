@@ -2,7 +2,7 @@ from langchain_core.documents import Document
 
 import pytest
 
-from backend.app.context_builder import (
+from backend.app.knowledge.context_builder import (
     BuiltContext,
     ContextBuilder,
 )

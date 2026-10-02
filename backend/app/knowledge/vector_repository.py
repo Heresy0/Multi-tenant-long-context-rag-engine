@@ -6,12 +6,12 @@ from uuid import UUID
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from .db.models import (
+from ..db.models import (
     EMBEDDING_DIMENSION,
     DocumentChunk,
     KnowledgeDocument,
 )
-from .security.retrieval_scope import RetrievalScope
+from ..security.retrieval_scope import RetrievalScope
 
 
 @dataclass(frozen=True, slots=True)

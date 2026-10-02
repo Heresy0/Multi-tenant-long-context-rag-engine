@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import BinaryIO
 from uuid import uuid4
 
-from .security.retrieval_scope import RetrievalScope
+from ..security.retrieval_scope import RetrievalScope
 
 
 SUPPORTED_SUFFIXES = {

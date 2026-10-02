@@ -3,9 +3,9 @@ from uuid import uuid4
 from langchain_core.embeddings import Embeddings
 
 from backend.app.db.models import EMBEDDING_DIMENSION
-from backend.app.pgvector_retriever import PgVectorRetriever
+from backend.app.knowledge.pgvector_retriever import PgVectorRetriever
 from backend.app.security.retrieval_scope import RetrievalScope
-from backend.app.vector_repository import (
+from backend.app.knowledge.vector_repository import (
     PgVectorRepository,
     VectorSearchHit,
 )

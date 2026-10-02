@@ -19,15 +19,15 @@ from backend.app.db.session import (  # noqa: E402
     create_session_factory,
     verify_database_connection,
 )
-from backend.app.document_indexing_worker import (  # noqa: E402
+from backend.app.indexing.document_indexing_worker import (  # noqa: E402
     DocumentIndexingWorker,
 )
-from backend.app.observability import event_message  # noqa: E402
-from backend.app.metrics import (  # noqa: E402
+from backend.app.monitoring.observability import event_message  # noqa: E402
+from backend.app.monitoring.metrics import (  # noqa: E402
     record_cleaned_candidates,
     record_recovered_jobs,
 )
-from backend.app.worker_heartbeat_service import (  # noqa: E402
+from backend.app.indexing.worker_heartbeat_service import (  # noqa: E402
     WorkerHeartbeatService,
 )
 

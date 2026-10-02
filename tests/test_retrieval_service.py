@@ -3,12 +3,12 @@ from uuid import uuid4
 from langchain_core.embeddings import Embeddings
 import pytest
 
-from backend.app import retrieval_service as service_module
+from backend.app.knowledge import retrieval_service as service_module
 from backend.app.db.models import EMBEDDING_DIMENSION
-from backend.app.reranker import BaseReranker, RerankResult
-from backend.app.retrieval_service import RetrievalService
+from backend.app.knowledge.reranker import BaseReranker, RerankResult
+from backend.app.knowledge.retrieval_service import RetrievalService
 from backend.app.security.retrieval_scope import RetrievalScope
-from backend.app.vector_repository import (
+from backend.app.knowledge.vector_repository import (
     PgVectorRepository,
     StoredChunk,
     VectorSearchHit,

@@ -14,7 +14,7 @@ from backend.app.db.models import (
     KnowledgeDocument,
     Tenant,
 )
-from backend.app.tenant_document_quota_service import (
+from backend.app.governance.tenant_document_quota_service import (
     TenantDocumentQuotaExceeded,
     TenantDocumentQuotaService,
 )

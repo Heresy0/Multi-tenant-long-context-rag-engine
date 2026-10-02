@@ -10,20 +10,20 @@ from langchain_core.documents import Document
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from .config import Settings
-from .db.models import (
+from ..config import Settings
+from ..db.models import (
     EMBEDDING_DIMENSION,
     DocumentChunk,
     KnowledgeDocument,
 )
-from .rag import (
+from ..knowledge.rag import (
     CHUNKING_VERSION,
     calculate_file_hash,
     calculate_source_id,
     create_embeddings,
     split_file,
 )
-from .security.retrieval_scope import RetrievalScope
+from ..security.retrieval_scope import RetrievalScope
 
 
 class DocumentCandidateNotFound(LookupError):

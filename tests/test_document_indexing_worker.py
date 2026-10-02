@@ -20,18 +20,18 @@ from backend.app.db.models import (
     Tenant,
     User,
 )
-from backend.app.document_indexing_job_service import (
+from backend.app.indexing.document_indexing_job_service import (
     DocumentIndexingJobService,
 )
-from backend.app.document_indexing_worker import (
+from backend.app.indexing.document_indexing_worker import (
     DocumentIndexingWorker,
 )
-from backend.app.document_upload_service import (
+from backend.app.documents.document_upload_service import (
     DocumentUploadResult,
     DocumentUploadService,
 )
-from backend.app.rag import calculate_source_id
-from backend.app.metrics import REGISTRY
+from backend.app.knowledge.rag import calculate_source_id
+from backend.app.monitoring.metrics import REGISTRY
 from backend.app.security.retrieval_scope import RetrievalScope
 
 
