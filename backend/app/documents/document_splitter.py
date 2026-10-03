@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
@@ -25,6 +25,7 @@ class ContentUnit:
     kind: str
     content: str | list[str]
     section_path: tuple[str,...]
+    metadata: dict[str, str] = field(default_factory=dict)
 
 
 def iter_docx_blocks(
@@ -215,10 +216,23 @@ def split_docx(
     resolved_document_name = (
         document_name or path.stem
     )
-    document_type = document_type_from_name(
-        resolved_document_name
-    )
     units = collect_units(word_document)
+
+    return split_content_units(
+        units, path=path, document_name=resolved_document_name,
+    )
+
+
+def split_content_units(
+    units: list[ContentUnit],
+    *,
+    path: Path,
+    document_name: str,
+    chunk_size: int = 450,
+    chunk_overlap: int = 60,
+) -> list[Document]:
+    """各格式识别结构后，共用分块、上下文和元数据生成。"""
+    document_type = document_type_from_name(document_name)
 
     normal_splitter = RecursiveCharacterTextSplitter(
         separators = [
@@ -233,8 +247,8 @@ def split_docx(
             " ",
             "",
         ],
-        chunk_size =450,
-        chunk_overlap=60,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
     )
 
     faq_splitter = RecursiveCharacterTextSplitter(
@@ -250,7 +264,7 @@ def split_docx(
         section_name = section_path or "文档说明"
 
         prefix = (
-            f"文档：{resolved_document_name}\n"
+            f"文档：{document_name}\n"
             f"章节：{section_name}\n"
         )
 
@@ -258,6 +272,12 @@ def split_docx(
             parts = split_large_table(unit.content)
         elif unit.kind == "faq":
             parts = faq_splitter.split_text(str(unit.content))
+        elif unit.kind == "code":
+            parts = split_code_block(
+                str(unit.content),
+                language=unit.metadata.get("code_language", ""),
+                fence=unit.metadata.get("code_fence", "```"),
+            )
         else:
             parts = normal_splitter.split_text(str(unit.content))
 
@@ -270,17 +290,40 @@ def split_docx(
                     metadata={
                         "source": str(path),
                         "document_name": (
-                            resolved_document_name
+                            document_name
                         ),
                         "document_type": document_type,
                         "section_path": section_path,
                         "chunk_type": unit.kind,
                         "parent_key": parent_key,
                         "chunk_in_parent": part_index,
+                        **unit.metadata,
                     },
                 )
             )
 
     return chunks
 
-    
+
+def split_code_block(
+    code: str, *, language: str, fence: str, max_chars: int = 900,
+) -> list[str]:
+    """优先按代码行切分，保留缩进，并为每个分块补完整围栏。"""
+    parts: list[str] = []
+    current = ""
+    for line in code.splitlines(keepends=True):
+        if current and len(current) + len(line) > max_chars:
+            parts.append(current)
+            current = ""
+        # 极长单行也有限制；不使用文本切分器，避免丢失缩进。
+        while len(line) > max_chars:
+            parts.append(line[:max_chars])
+            line = line[max_chars:]
+        current += line
+    if current or not parts:
+        parts.append(current)
+    wrapped: list[str] = []
+    for part in parts:
+        separator = "" if part.endswith("\n") else "\n"
+        wrapped.append(f"{fence}{language}\n{part}{separator}{fence}")
+    return wrapped

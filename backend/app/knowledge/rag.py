@@ -15,9 +15,11 @@ from langchain_text_splitters import (
 from ..config import Settings
 from ..db.models import EMBEDDING_DIMENSION
 from ..documents.document_splitter import split_docx
+from ..documents.pdf_splitter import split_pdf
+from ..documents.text_splitter import split_markdown, split_txt
 
 
-CHUNKING_VERSION = "structured-v1"
+CHUNKING_VERSION = "structured-v3"
 
 
 def split_file(
@@ -32,6 +34,16 @@ def split_file(
             path,
             document_name=document_name,
         )
+
+    if path.suffix.lower() == ".pdf":
+        return split_pdf(
+            path,
+            document_name=document_name,
+        )
+
+    if path.suffix.lower() in {".txt", ".md"}:
+        split = split_markdown if path.suffix.lower() == ".md" else split_txt
+        return split(path, document_name=document_name)
 
     documents = load_file(path)
     splitter = create_text_splitter()
