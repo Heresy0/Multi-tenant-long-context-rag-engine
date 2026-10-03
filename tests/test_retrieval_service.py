@@ -265,3 +265,23 @@ def test_search_runs_scoped_pgvector_hybrid_and_rerank_pipeline(
     assert results[0].metadata["tenant_id"] == str(
         scope.tenant_id
     )
+
+
+def test_multi_scope_shares_budget_and_drops_out_of_scope_hits_before_reranking(monkeypatch):
+    tenant, kb1, kb2 = uuid4(), uuid4(), uuid4()
+    scope = RetrievalScope(tenant, knowledge_base_ids={kb1, kb2}, knowledge_base_names=((kb1, "公共"), (kb2, "技术")))
+    from dataclasses import replace
+    first = _stored_chunk(RetrievalScope(tenant, kb1))
+    second = replace(_stored_chunk(RetrievalScope(tenant, kb2)), chunk_id="two", content="第二库内容", metadata={"source_id": "two", "chunk_content_hash": "two"})
+    denied = replace(_stored_chunk(RetrievalScope(tenant, uuid4())), chunk_id="denied", content="不可发送的敏感内容")
+    foreign = replace(_stored_chunk(RetrievalScope(uuid4(), uuid4())), chunk_id="foreign", content="跨租户敏感内容")
+    chunks = [first, second, denied, foreign]
+    repository = FakeRepository(chunks, [_search_hit(c) for c in chunks])
+    service, embeddings, reranker, _ = _service(monkeypatch, repository)
+    results = service.search("跨库问题", scope=scope, session=object())
+    assert len(embeddings.queries) == 1
+    assert len(repository.search_calls) == 1
+    assert repository.search_calls[0]["limit"] == 30
+    assert set(reranker.calls[0]["documents"]) == {first.content, second.content}
+    assert reranker.calls[0]["top_n"] == 8
+    assert results[0].metadata["knowledge_base_name"] in {"公共", "技术"}

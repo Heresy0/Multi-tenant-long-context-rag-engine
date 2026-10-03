@@ -29,6 +29,8 @@ SENSITIVE_DETAIL_KEYS = frozenset({
     "token",
 })
 SAFE_DETAIL_KEYS = frozenset({
+    "scope_mode",
+    "knowledge_base_ids",
     "active",
     "answerable",
     "citation_count",

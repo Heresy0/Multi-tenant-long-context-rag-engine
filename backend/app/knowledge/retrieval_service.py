@@ -92,4 +92,8 @@ class RetrievalService:
             },
         )
 
-        return retriever.invoke(query)
+        documents = retriever.invoke(query)
+        names = {str(kb_id): name for kb_id, name in scope.knowledge_base_names}
+        for document in documents:
+            document.metadata["knowledge_base_name"] = names.get(document.metadata.get("knowledge_base_id"))
+        return documents

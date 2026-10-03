@@ -110,8 +110,7 @@ class PgVectorRepository:
             .where(
                 DocumentChunk.tenant_id
                 == scope.tenant_id,
-                DocumentChunk.knowledge_base_id
-                == scope.knowledge_base_id,
+                scope.knowledge_base_filter(DocumentChunk.knowledge_base_id),
                 KnowledgeDocument.status == "ready",
             )
             .order_by(distance_expression)
@@ -156,7 +155,7 @@ class PgVectorRepository:
             KnowledgeDocument.id == DocumentChunk.document_id,
         )).where(
             DocumentChunk.tenant_id == scope.tenant_id,
-            DocumentChunk.knowledge_base_id == scope.knowledge_base_id,
+            scope.knowledge_base_filter(DocumentChunk.knowledge_base_id),
             KnowledgeDocument.status == "ready",
         ).limit(1)
         return self._session.scalar(statement) is not None
@@ -186,12 +185,10 @@ class PgVectorRepository:
             .where(
                 DocumentChunk.tenant_id
                 == scope.tenant_id,
-                DocumentChunk.knowledge_base_id
-                == scope.knowledge_base_id,
+                scope.knowledge_base_filter(DocumentChunk.knowledge_base_id),
                 KnowledgeDocument.tenant_id
                 == scope.tenant_id,
-                KnowledgeDocument.knowledge_base_id
-                == scope.knowledge_base_id,
+                scope.knowledge_base_filter(KnowledgeDocument.knowledge_base_id),
                 KnowledgeDocument.status == "ready",
             )
             .order_by(

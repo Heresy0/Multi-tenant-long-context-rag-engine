@@ -24,6 +24,22 @@ def scope():
     return RetrievalScope(uuid4(), uuid4())
 
 
+@pytest.mark.parametrize("ids", [(), (uuid4(), uuid4())])
+def test_bm25_multi_scope_uses_bound_ids_and_empty_set_is_false(ids):
+    session = FakeSession()
+    allowed = RetrievalScope(uuid4(), knowledge_base_ids=ids)
+    PgKeywordRepository(session).search("问题", scope=allowed, limit=8)
+    statement, parameters = session.calls[0]
+    assert parameters["knowledge_base_ids"] == sorted(ids, key=str)
+    sql = str(statement.params(**parameters).compile(dialect=postgresql.dialect(), compile_kwargs={"render_postcompile": True}))
+    assert "document_chunks.tenant_id =" in sql
+    assert "document_chunks.knowledge_base_id IN" in sql
+    assert "documents.status =" in sql
+    assert sql.index("WHERE") < sql.index("ORDER BY") < sql.index("LIMIT")
+    if not ids:
+        assert "1 != 1" in sql
+
+
 def test_shared_tokenizer_preserves_chinese_identifiers_numbers_and_repeats():
     tokens = tokenize_chinese("令牌 RATE-001 Idempotency-Key 99.2% 429 令牌")
     assert "令牌" in tokens

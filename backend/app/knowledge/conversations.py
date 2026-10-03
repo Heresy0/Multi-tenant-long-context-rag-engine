@@ -1,5 +1,6 @@
 """Persist paired turns; serialize requests without holding a DB lock during LLM calls."""
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, or_, select, update
@@ -54,7 +55,25 @@ class ConversationStore:
     def list(self, limit=20, offset=0):
         return list(self.session.scalars(select(Conversation).where(*self._owner()).order_by(Conversation.updated_at.desc(), Conversation.id.desc()).limit(limit).offset(offset)))
 
-    def turns(self, conversation_id: UUID, *, limit=100, before=None):
+    def _turn_is_readable(self, turn):
+        # 全范围模式保存整个候选范围，保守覆盖引用遗漏及追问的间接依赖。
+        ids = turn.authorized_knowledge_base_ids
+        if not ids and turn.knowledge_base_id is not None:
+            ids = [str(turn.knowledge_base_id)]  # 迁移前的单库历史。
+        try:
+            return bool(ids) and {UUID(value) for value in ids} <= self.scope.knowledge_base_ids
+        except (TypeError, ValueError):
+            return False
+
+    def safe_title(self, row):
+        first = self.session.scalar(select(ConversationTurn).where(
+            ConversationTurn.tenant_id == self.scope.tenant_id,
+            ConversationTurn.conversation_id == row.id,
+            ConversationTurn.turn_index == 1,
+        ))
+        return row.title if first is None or self._turn_is_readable(first) else "历史权限已变更"
+
+    def turns(self, conversation_id: UUID, *, limit=100, before=None, for_context=False):
         self.get(conversation_id)
         statement = select(ConversationTurn).where(
             ConversationTurn.tenant_id == self.scope.tenant_id,
@@ -64,7 +83,20 @@ class ConversationStore:
         if before is not None:
             statement = statement.where(ConversationTurn.turn_index < before)
         rows = list(self.session.scalars(statement.order_by(ConversationTurn.turn_index.desc()).limit(limit)))
-        return list(reversed(rows))
+        rows.reverse()
+        if for_context:
+            # 失效轮次之前的上下文也不再沿用，避免跨越权限变化继续旧话题。
+            start = 0
+            for i, turn in enumerate(rows):
+                if not self._turn_is_readable(turn):
+                    start = i + 1
+            return rows[start:]
+        return [turn if self._turn_is_readable(turn) else SimpleNamespace(
+            turn_index=turn.turn_index, question="历史内容已隐藏：访问权限发生变化。",
+            retrieval_question="", created_at=turn.created_at,
+            result_json=AnswerResult(answer="该轮历史不再可访问，请重新提问。", answerable=False,
+                                     citations=[], refusal_reason="知识库访问权限已变更。").model_dump(mode="json"),
+        ) for turn in rows]
 
     def acquire(self, conversation_id: UUID) -> str:
         """原子抢占有超时的租约，模型调用期间不持有数据库行锁。"""
@@ -100,6 +132,7 @@ class ConversationStore:
             tenant_id=self.scope.tenant_id, knowledge_base_id=self.scope.knowledge_base_id,
             conversation_id=conversation_id, turn_index=index, question=question,
             retrieval_question=retrieval_question, result_json=result.model_dump(mode="json"),
+            authorized_knowledge_base_ids=sorted(map(str, self.scope.knowledge_base_ids)),
         ))
         self.session.flush()
         if commit:

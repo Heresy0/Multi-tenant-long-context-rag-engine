@@ -17,16 +17,17 @@ function notice(text = "", error = false) {
   $("notice").classList.toggle("error", error);
 }
 function editable() { return ["editor", "admin"].includes(state.kb?.permission); }
+function canAsk() { return !!state.auth?.authenticated && (!!state.kb || state.bases.length > 0); }
 function sameContext(revision) { return revision === state.revision && state.auth.authenticated; }
 function errorNotice(error) {
   if (!state.auth?.authenticated) resetWorkspace();
   notice(error.message || "操作失败，请稍后重试。", true);
 }
 function updateControls() {
-  $("question").disabled = !state.kb || state.asking || state.loading;
-  $("ask-button").disabled = !state.kb || state.asking || state.loading;
+  $("question").disabled = !canAsk() || state.asking || state.loading;
+  $("ask-button").disabled = !canAsk() || state.asking || state.loading;
   $("ask-button").firstChild.textContent = state.asking ? "生成中… " : "发送问题 ";
-  for (const id of ["new-conversation", "conversation-list"]) $(id).disabled = !state.kb || state.asking || state.loading;
+  for (const id of ["new-conversation", "conversation-list"]) $(id).disabled = !canAsk() || state.asking || state.loading;
   $("delete-conversation").disabled = !state.conversationId || state.asking || state.loading;
   $("upload-file").disabled = !editable() || state.uploading || state.loading;
   $("upload-button").disabled = !editable() || !$("upload-file").files.length || state.uploading || state.loading;
@@ -84,6 +85,12 @@ function renderBases() {
   $("kb-count").textContent = state.bases.length;
   $("kb-list").replaceChildren();
   if (!state.bases.length) $("kb-list").append(element("p", "当前账号没有可访问的知识库，请联系管理员授权。", "sidebar-empty"));
+  if (state.bases.length) {
+    const all = element("button", "全部可访问知识库", `kb-button${state.kb === null ? " selected" : ""}`);
+    all.setAttribute("aria-pressed", String(state.kb === null));
+    all.addEventListener("click", () => selectBase(null));
+    $("kb-list").append(all);
+  }
   for (const kb of state.bases) {
     const button = element("button", undefined, `kb-button${kb.id === state.kb?.id ? " selected" : ""}`);
     button.append(element("span", "", "kb-marker"), element("span", kb.name));
@@ -101,25 +108,27 @@ async function connect() {
     state.bases = data.items;
     $("login-dialog").close();
     notice(); renderBases();
-    if (state.bases.length) await selectBase(state.bases[0]);
+    if (state.bases.length) await selectBase(null);
     else notice("当前账号尚未获得知识库访问权限，请联系管理员。");
   } catch (error) { if (revision === state.revision) errorNotice(error); }
   finally { state.loading = false; updateControls(); }
 }
 async function selectBase(kb) {
-  state.revision += 1;
+  const revision = ++state.revision;
+  state.loading = true;
   clearTimeout(state.polling);
   state.kb = kb; state.documents = []; state.jobs = [];
   state.conversations = []; renderConversations();
-  $("current-kb").textContent = kb.name;
-  $("document-kb").textContent = kb.name;
-  $("permission").textContent = permissions[kb.permission] || kb.permission;
+  $("current-kb").textContent = kb?.name || "全部可访问知识库";
+  $("document-kb").textContent = kb?.name || "请选择文档所属知识库";
+  $("permission").textContent = kb ? (permissions[kb.permission] || kb.permission) : "按当前账号权限检索";
   $("upload-form").reset();
-  $("selected-file").textContent = editable() ? "尚未选择文件" : "你拥有只读权限，可查看文档和提问。";
+  $("selected-file").textContent = !kb ? "上传或管理文档，请先选择左侧的具体知识库。" : (editable() ? "尚未选择文件" : "你拥有只读权限，可查看文档和提问。");
   clearConversation(); renderBases(); renderDocuments(); renderJobs(); notice(); updateControls();
-  await Promise.all([refreshDocuments(), refreshConversations()]);
+  try { await Promise.all([refreshDocuments(), refreshConversations()]); }
+  finally { if (revision === state.revision) { state.loading = false; updateControls(); } }
 }
-function conversationPath() { return `/api/knowledge-bases/${state.kb.id}/conversations`; }
+function conversationPath() { return state.kb ? `/api/knowledge-bases/${state.kb.id}/conversations` : "/api/conversations"; }
 function renderConversations() {
   const select = $("conversation-list");
   const first = element("option", "新对话"); first.value = "";
@@ -130,7 +139,7 @@ function renderConversations() {
   select.value = state.conversationId || "";
 }
 async function refreshConversations() {
-  if (!state.kb) return;
+  if (!canAsk()) return;
   const revision = state.revision;
   try {
     const { data } = await api(conversationPath());
@@ -142,7 +151,7 @@ function renderAnswer(container, data, requestId) {
   const answer = container.querySelector(".message-text"); answer.classList.remove("loading"); answer.textContent = data.answer;
   if (!data.answerable && data.refusal_reason) container.append(element("p", data.refusal_reason, "answer-meta"));
   const citations = element("div", undefined, "citation-list");
-  for (const citation of data.citations || []) citations.append(element("div", `[${citation.citation_id}] ${citation.document_name} · ${citation.section_path}`, "citation"));
+  for (const citation of data.citations || []) citations.append(element("div", `[${citation.citation_id}] ${citation.knowledge_base_name ? `${citation.knowledge_base_name} · ` : ""}${citation.document_name} · ${citation.section_path}`, "citation"));
   container.append(citations);
   const seconds = data.timings ? `${(data.timings.total_ms / 1000).toFixed(1)} 秒 · ` : "";
   container.append(element("div", `${seconds}${data.citations?.length || 0} 个来源${requestId ? ` · 请求编号 ${requestId}` : ""}`, "answer-meta"));
@@ -268,7 +277,7 @@ async function checkHealth() {
 
 document.querySelectorAll("[data-tab]").forEach(button => button.addEventListener("click", () => setTab(button.dataset.tab)));
 document.querySelectorAll("[data-question]").forEach(button => button.addEventListener("click", () => {
-  if (!state.kb) { $("login-dialog").showModal(); return; }
+  if (!canAsk()) { $("login-dialog").showModal(); return; }
   if (!state.asking) { $("question").value = button.dataset.question; $("question").focus(); }
 }));
 $("session-button").addEventListener("click", () => {
@@ -332,7 +341,7 @@ $("delete-confirm").addEventListener("click", async () => {
 $("question-form").addEventListener("submit", async event => {
   event.preventDefault();
   const question = $("question").value.trim();
-  if (!question || !state.kb || state.asking || state.loading) return;
+  if (!question || !canAsk() || state.asking || state.loading) return;
   const revision = state.revision;
   state.asking = true; updateControls(); notice();
   message("user", question); $("question").value = "";
@@ -345,7 +354,7 @@ $("question-form").addEventListener("submit", async event => {
       state.conversationId = data.id;
       state.conversations.unshift(data); renderConversations();
     }
-    const { data, requestId } = await api("/api/qa", { method: "POST", body: JSON.stringify({ knowledge_base_id: state.kb.id, question, conversation_id: state.conversationId }) });
+    const { data, requestId } = await api("/api/qa", { method: "POST", body: JSON.stringify({ knowledge_base_id: state.kb?.id || null, question, conversation_id: state.conversationId }) });
     if (!sameContext(revision)) return;
     renderAnswer(pending, data, requestId);
     await refreshConversations();
@@ -367,7 +376,7 @@ async function init() {
     state.config = await response.json(); state.auth = new AuthSession(state.config);
     $("upload-description").textContent = `支持 PDF、DOCX、TXT、Markdown · 单文件最大 ${Math.round(state.config.max_upload_bytes / 1048576)} MB`;
     if (await state.auth.callback()) await connect();
-    else notice("登录企业账号后，选择知识库开始提问。", false);
+    else notice("登录企业账号后，即可在有权限的知识库中提问。", false);
   } catch (error) { notice(error.message, true); }
   updateControls(); await checkHealth();
   setInterval(checkHealth, 60000);

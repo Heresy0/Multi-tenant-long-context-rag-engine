@@ -11,7 +11,7 @@
 - Keycloak OIDC 登录、JWT 签名及 issuer、audience 校验
 - 租户、部门、用户和知识库四层权限模型
 - 用户授权与部门授权，支持 `viewer`、`editor` 和 `admin` 权限
-- 不可变 `RetrievalScope`，检索时强制携带 `tenant_id` 和 `knowledge_base_id`
+- 不可变 `RetrievalScope`，检索时强制携带 `tenant_id` 和后端计算的授权知识库范围
 - PostgreSQL 16、pgvector 0.8.6 和余弦距离 HNSW 索引
 - PDF、DOCX、TXT、Markdown 文档解析、切分和 1024 维向量入库
 - 文件内容未变化时跳过重复入库，更新失败时保留旧版本
@@ -592,7 +592,7 @@ Authorization: Bearer <access_token>
 | `POST` | `/api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}/retry` | editor | 人工重试最终失败任务 |
 | `DELETE` | `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}` | editor | 删除文档、分块和受管文件 |
 | `GET` | `/api/knowledge-bases/{knowledge_base_id}/audit-events` | admin | 查询租户隔离的知识库审计事件 |
-| `POST` | `/api/qa` | viewer | 在指定知识库范围内问答 |
+| `POST` | `/api/qa` | viewer | 默认在全部授权知识库内问答，也可指定单个知识库 |
 
 问答请求示例：
 
@@ -702,7 +702,7 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 
 ## 多轮对话
 
-知识问答页面支持新建、恢复和删除私人对话。对话按租户、用户和知识库隔离；切换知识库或退出登录会清除页面中的当前对话。重新登录后可从“最近对话”恢复历史。
+知识问答页面支持新建、恢复和删除私人对话。对话按租户、用户和检索模式隔离；单库对话仍绑定原知识库，全范围对话单独保存。切换范围或退出登录会清除页面中的当前对话。重新登录后可从“最近对话”恢复历史。
 
 启用前先迁移数据库，再重启 API 服务：
 
@@ -725,6 +725,24 @@ python -m alembic upgrade head
 完整问答和引用保存在 PostgreSQL；窗口外的历史仍可查看，但不会进入当前模型上下文。本版是会话级短期记忆，不含长期用户画像、自动摘要或跨对话记忆。同一对话的并发写入返回 `409`；超时租约可自动恢复，旧请求不能覆盖新历史。模型、检索或成功审计失败时不写入半轮对话。每次读写历史和提问都会重新检查当前知识库权限，权限撤销后不能继续访问。
 
 历史内容属于敏感业务数据：审计只记录动作与统计，不包含问题、回答和正文；部署时仍需配置数据库访问控制、备份加密和历史保留策略。页面只展示最近 20 段对话、恢复最近 100 轮，更早记录可以通过分页接口读取。浏览器超时后请先恢复该对话确认是否已完成，再决定重试（目前没有请求幂等去重）。
+
+## 默认跨授权知识库问答
+
+登录后默认选中“全部可访问知识库”，无需先选部门即可提问。左侧的具体知识库是可选筛选；文档上传、删除和索引任务仍必须选择一个具体知识库。
+
+`POST /api/qa` 的 `knowledge_base_id` 可省略或传 `null`，后端根据登录身份重新计算同租户的公共知识库、部门授权和用户直接授权；指定 ID 时维持原单库模式。客户端不能自行提供授权知识库列表。没有任何可读知识库时返回 `403`，不会退化成无过滤搜索。
+
+```json
+{"question": "开放平台令牌过期后怎么处理？"}
+```
+
+多轮全范围模式使用 `POST/GET /api/conversations` 和 `GET/DELETE /api/conversations/{conversation_id}`，分页参数与单库接口一致。创建后将 `conversation_id` 传给问答接口，保持 `knowledge_base_id` 为空。原 `/api/knowledge-bases/{knowledge_base_id}/conversations` 接口及已有历史继续有效，两种模式的会话 ID 不能混用。
+
+向量检索和 BM25 都先按 `tenant_id + 授权知识库 ID 集合 + ready 文档` 过滤，再取候选；跨库共享原有 30 条候选/8 条重排结果预算，不会按知识库数量增加完整问答调用。每条引用新增 `knowledge_base_id` 和 `knowledge_base_name`，用于展示来源所属库。
+
+每轮历史保存当时的完整授权检索范围。后续权限缩小时，可能受影响的旧轮次及标题会被隐藏，追问改写只使用最后一个失效轮次之后的安全历史。此策略是保守的：即使旧回答只引用了其他库，只要该轮曾允许检索的某个库不再可访问，也会隐藏该轮；保存的数据库原始历史不会被删除。新增授权不会把历史对话变成单库对话，旧单库对话也不会自动扩大范围。
+
+新增迁移 `b8d0f2a4c607`：会话知识库字段允许为空，并添加轮次授权范围快照和跨库会话的租户外键。启用前停止 API/Worker 写入、执行 `python -m alembic upgrade head`，再重启服务并刷新页面。若数据库仍未完成前面的 BM25 迁移，请先按下面“已有环境升级”准备 pg_search 镜像，不要跳过迁移或手工修改 Alembic 版本号。回滚发现全范围会话时会拒绝执行，要求先导出并处理，避免静默丢失记录。
 
 ## PostgreSQL 持久化 BM25
 

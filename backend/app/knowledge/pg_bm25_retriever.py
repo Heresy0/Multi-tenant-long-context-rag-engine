@@ -19,6 +19,8 @@ class PgBM25Retriever(BaseRetriever):
     ) -> list[Document]:
         documents = []
         for hit in self.repository.search(query, scope=self.scope, limit=self.k):
+            if hit.tenant_id != self.scope.tenant_id or hit.knowledge_base_id not in self.scope.knowledge_base_ids:
+                continue
             document = stored_chunk_to_document(hit)
             document.metadata.update(bm25_score=hit.score, keyword_backend="pg_search")
             documents.append(document)

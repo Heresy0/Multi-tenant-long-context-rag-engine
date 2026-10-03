@@ -106,6 +106,24 @@ def test_scope_and_ready_filter_apply_before_limit(bm25_session):
     assert [hit.chunk_id for hit in hits] == [visible.id]
 
 
+def test_multi_kb_bm25_and_vector_queries_isolate_ungranted_and_other_tenant_data(bm25_session):
+    from backend.app.knowledge.vector_repository import PgVectorRepository
+    first, tenant = _scope(bm25_session)
+    second, _ = _scope(bm25_session, tenant=tenant)
+    ungranted, _ = _scope(bm25_session, tenant=tenant)
+    foreign, _ = _scope(bm25_session)
+    visible = [_chunk(bm25_session, _document(bm25_session, s), "跨库隔离标记") for s in [first, second]]
+    for excluded in [ungranted, foreign]:
+        _chunk(bm25_session, _document(bm25_session, excluded), "跨库隔离标记 " * 20)
+    _chunk(bm25_session, _document(bm25_session, first, status="failed"), "跨库隔离标记")
+    combined = RetrievalScope(first.tenant_id, knowledge_base_ids={first.knowledge_base_id, second.knowledge_base_id})
+    assert {h.chunk_id for h in PgKeywordRepository(bm25_session).search("跨库隔离标记", scope=combined)} == {c.id for c in visible}
+    assert {h.chunk_id for h in PgVectorRepository(bm25_session).search(scope=combined, query_embedding=[1.0] + [0.0] * 1023)} == {c.id for c in visible}
+    empty = RetrievalScope(first.tenant_id)
+    assert PgKeywordRepository(bm25_session).search("跨库隔离标记", scope=empty) == []
+    assert PgVectorRepository(bm25_session).search(scope=empty, query_embedding=[1.0] + [0.0] * 1023) == []
+
+
 def test_insert_update_delete_and_rollback_are_visible_atomically(bm25_session):
     scope, _ = _scope(bm25_session)
     chunk = _chunk(bm25_session, _document(bm25_session, scope), "originalmarker")

@@ -249,6 +249,8 @@ def answer_question(
         def record_answer_success(result):
             commit_audit(outcome="success", details={
                 "answerable": result.answerable, "citation_count": len(result.citations),
+                "scope_mode": "all_accessible" if scope.knowledge_base_id is None else "single",
+                "knowledge_base_ids": sorted(map(str, scope.knowledge_base_ids)),
             })
 
         conversation_fields = {}

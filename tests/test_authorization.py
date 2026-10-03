@@ -21,6 +21,32 @@ from backend.app.security.authorization import (
     AuthorizationService,
 )
 from backend.app.security.principal import Principal
+from backend.app.security.retrieval_scope import RetrievalScope
+
+
+def test_all_accessible_scope_is_derived_from_public_department_and_direct_grants(session, permission_data):
+    ids = permission_data
+    principal = Principal(ids["alice"], ids["tenant_a"], "alice")
+    authorization = AuthorizationService(session)
+    scope = authorization.require_retrieval_scope(principal=principal)
+    assert scope.knowledge_base_id is None
+    assert scope.knowledge_base_ids == {ids["company_kb"], ids["technology_kb"], ids["special_kb"]}
+    assert {kb_id for kb_id, _ in scope.knowledge_base_names} == scope.knowledge_base_ids
+    session.get(User, principal.user_id).status = "disabled"
+    session.commit()
+    with pytest.raises(AuthorizationDenied):
+        authorization.require_retrieval_scope(principal=principal)
+
+
+def test_retrieval_scope_freezes_ids_and_rejects_mixed_single_scope():
+    tenant, kb, other = uuid4(), uuid4(), uuid4()
+    ids = {kb, other}
+    scope = RetrievalScope(tenant, knowledge_base_ids=ids)
+    ids.clear()
+    assert scope.knowledge_base_ids == {kb, other}
+    assert RetrievalScope(tenant, kb).knowledge_base_ids == {kb}
+    with pytest.raises(ValueError):
+        RetrievalScope(tenant, kb, frozenset({other}))
 
 
 @pytest.fixture

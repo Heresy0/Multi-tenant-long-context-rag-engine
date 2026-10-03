@@ -18,6 +18,8 @@ class ContextItem:
     section_path: str
     chunk_id: str | None
     rerank_score: float | None
+    knowledge_base_id: str | None = None
+    knowledge_base_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -92,8 +94,12 @@ class ContextBuilder:
                 or "未标注章节"
             )
             citation_id = f"资料{len(items) + 1}"
+            knowledge_base_label = (
+                f"知识库：{metadata['knowledge_base_name']}\n" if metadata.get("knowledge_base_name") else ""
+            )
             prefix = (
                 f"[{citation_id}]\n"
+                f"{knowledge_base_label}"
                 f"文档：{document_name}\n"
                 f"章节：{section_path}\n"
                 "内容："
@@ -151,6 +157,8 @@ class ContextBuilder:
                     and not isinstance(rerank_score, bool)
                     else None
                 ),
+                knowledge_base_id=metadata.get("knowledge_base_id"),
+                knowledge_base_name=metadata.get("knowledge_base_name"),
             )
             rendered_block = f"{prefix}{content}"
 

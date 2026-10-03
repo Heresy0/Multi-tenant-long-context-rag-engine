@@ -23,7 +23,7 @@ class PgKeywordRepository:
         self._session = session
 
     @staticmethod
-    def search_statement():
+    def search_statement(*, all_accessible=False):
         """Filter scope and ready documents before LIMIT; bind all user inputs."""
         score = func.pdb.score(DocumentChunk.id).label("bm25_score")
         return (
@@ -35,7 +35,8 @@ class PgKeywordRepository:
             ))
             .where(
                 DocumentChunk.tenant_id == bindparam("tenant_id"),
-                DocumentChunk.knowledge_base_id == bindparam("knowledge_base_id"),
+                (DocumentChunk.knowledge_base_id.in_(bindparam("knowledge_base_ids", expanding=True))
+                 if all_accessible else DocumentChunk.knowledge_base_id == bindparam("knowledge_base_id")),
                 KnowledgeDocument.status == "ready",
                 DocumentChunk.keyword_text.op("|||", is_comparison=True)(bindparam("keyword_query")),
             )
@@ -49,12 +50,17 @@ class PgKeywordRepository:
         keyword_query = build_keyword_text(query)
         if not keyword_query:
             return []
-        rows = self._session.execute(self.search_statement(), {
+        parameters = {
             "tenant_id": scope.tenant_id,
-            "knowledge_base_id": scope.knowledge_base_id,
             "keyword_query": keyword_query,
             "result_limit": limit,
-        }).all()
+        }
+        all_accessible = scope.knowledge_base_id is None
+        if all_accessible:
+            parameters["knowledge_base_ids"] = sorted(scope.knowledge_base_ids, key=str)
+        else:
+            parameters["knowledge_base_id"] = scope.knowledge_base_id
+        rows = self._session.execute(self.search_statement(all_accessible=all_accessible), parameters).all()
         return [KeywordSearchHit(
             chunk_id=chunk.id, document_id=document.id,
             tenant_id=chunk.tenant_id, knowledge_base_id=chunk.knowledge_base_id,

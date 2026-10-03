@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -237,12 +237,14 @@ def test_migration_upgrade_and_downgrade_match_orm(data):
     from alembic.operations import Operations
     from sqlalchemy import inspect
     migration = importlib.import_module("migrations.versions.f3a5b7c9d204_add_conversations")
+    all_scope_migration = importlib.import_module("migrations.versions.b8d0f2a4c607_all_accessible_conversations")
     data.session.close()
     with data.engine.begin() as connection:
         ConversationTurn.__table__.drop(connection)
         Conversation.__table__.drop(connection)
         with Operations.context(MigrationContext.configure(connection)):
             migration.upgrade()
+            all_scope_migration.upgrade()
         schema = inspect(connection)
         for model in (Conversation, ConversationTurn):
             assert {c["name"] for c in schema.get_columns(model.__tablename__)} == set(model.__table__.columns.keys())
@@ -250,6 +252,7 @@ def test_migration_upgrade_and_downgrade_match_orm(data):
                 c.name for c in model.__table__.foreign_key_constraints
             }
         with Operations.context(MigrationContext.configure(connection)):
+            all_scope_migration.downgrade()
             migration.downgrade()
         assert "conversations" not in inspect(connection).get_table_names()
         assert "conversation_turns" not in inspect(connection).get_table_names()
@@ -329,3 +332,86 @@ def test_access_revocation_blocks_history_and_followup(data, client):
     assert client.post("/api/qa", json={"knowledge_base_id": str(data.scope.knowledge_base_id),
         "question": "追问", "conversation_id": str(cid)}).status_code == 403
     assert client.app.state.answer_service.questions == []
+
+
+def test_all_accessible_api_and_stateless_defaults_preserve_scope_isolation(data, client):
+    response = client.post("/api/conversations")
+    assert response.status_code == 201, response.text
+    cid = response.json()["id"]
+    assert response.json()["knowledge_base_id"] is None
+    assert client.post("/api/qa", json={"question": "跨库问题"}).status_code == 200
+    for question in ("首次跨库提问", "它的要求呢？"):
+        response = client.post("/api/qa", json={"question": question, "conversation_id": cid})
+        assert response.status_code == 200, response.text
+    detail = client.get(f"/api/conversations/{cid}").json()
+    assert detail["turn_count"] == 2
+    assert len(detail["turns"]) == 2
+    assert client.get("/api/conversations").json()["items"][0]["id"] == cid
+    saved = data.session.scalars(select(ConversationTurn).where(ConversationTurn.conversation_id == UUID(cid))).all()
+    assert set(saved[0].authorized_knowledge_base_ids) == {str(data.scope.knowledge_base_id), str(data.other_kb.id)}
+    single_path = f"/api/knowledge-bases/{data.scope.knowledge_base_id}/conversations"
+    assert client.get(f"{single_path}/{cid}").status_code == 404
+    assert client.post("/api/qa", json={"knowledge_base_id": str(data.scope.knowledge_base_id),
+        "conversation_id": cid, "question": "不应混用"}).status_code == 404
+    single_cid = client.post(single_path).json()["id"]
+    assert client.post("/api/qa", json={"question": "不应混用", "conversation_id": single_cid}).status_code == 404
+    assert client.delete(f"/api/conversations/{cid}").status_code == 204
+    assert data.session.scalars(select(ConversationTurn).where(ConversationTurn.conversation_id == UUID(cid))).all() == []
+
+
+def test_all_scope_revocation_redacts_history_and_does_not_send_it_to_resolver(data, client):
+    cid = client.post("/api/conversations").json()["id"]
+    assert client.post("/api/qa", json={"question": "内部敏感标记", "conversation_id": cid}).status_code == 200
+    data.session.execute(update(KnowledgeBase).where(KnowledgeBase.id == data.other_kb.id).values(status="disabled"))
+    data.session.commit()
+    detail = client.get(f"/api/conversations/{cid}")
+    assert detail.status_code == 200
+    assert "内部敏感标记" not in detail.text
+    assert result().answer not in detail.text
+    assert result().answer not in client.get("/api/conversations").text
+    assert client.get("/api/conversations").json()["items"][0]["title"] == "历史权限已变更"
+    response = client.post("/api/qa", json={"question": "重新提问", "conversation_id": cid})
+    assert response.status_code == 200, response.text
+    resolver = client.app.state.conversation_answer_service.resolver
+    assert resolver.histories[-1] == []
+    assert client.post("/api/qa", json={"question": "新的追问", "conversation_id": cid}).status_code == 200
+    assert [turn.question for turn in resolver.histories[-1]] == ["重新提问"]
+
+
+def test_all_scope_private_owner_and_no_access_checks(data, client):
+    cid = client.post("/api/conversations").json()["id"]
+    client.app.dependency_overrides[get_current_principal] = lambda: Principal(data.other_user.id, data.principal.tenant_id, "bob")
+    assert client.get("/api/conversations").json()["items"] == []
+    assert client.get(f"/api/conversations/{cid}").status_code == 404
+    assert client.delete(f"/api/conversations/{cid}").status_code == 404
+    assert client.post("/api/qa", json={"question": "q", "conversation_id": cid}).status_code == 404
+    data.session.execute(update(KnowledgeBase).values(status="disabled"))
+    data.session.commit()
+    assert client.post("/api/qa", json={"question": "q"}).status_code == 403
+    assert client.post("/api/conversations").status_code == 403
+    assert client.app.state.answer_service.questions == []
+
+
+def test_all_scope_nullable_fk_still_rejects_cross_tenant_turns(data):
+    scope = RetrievalScope(data.scope.tenant_id, knowledge_base_ids={data.scope.knowledge_base_id})
+    store = ConversationStore(data.session, data.principal, scope)
+    cid = store.create().id
+    data.session.add(ConversationTurn(tenant_id=data.other_tenant.id, knowledge_base_id=None,
+        conversation_id=cid, turn_index=1, question="q", retrieval_question="q", result_json={}))
+    with pytest.raises(IntegrityError):
+        data.session.commit()
+    data.session.rollback()
+
+
+def test_migration_downgrade_refuses_to_delete_all_scope_history(data):
+    import importlib
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    scope = RetrievalScope(data.scope.tenant_id, knowledge_base_ids={data.scope.knowledge_base_id})
+    store = ConversationStore(data.session, data.principal, scope)
+    cid = store.create().id
+    migration = importlib.import_module("migrations.versions.b8d0f2a4c607_all_accessible_conversations")
+    with Operations.context(MigrationContext.configure(data.session.connection())):
+        with pytest.raises(RuntimeError, match="导出"):
+            migration.downgrade()
+    assert store.get(cid).id == cid
