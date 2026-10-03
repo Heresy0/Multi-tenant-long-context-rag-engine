@@ -8,8 +8,9 @@ from .hybrid_retriever import (
 )
 from .pgvector_retriever import (
     PgVectorRetriever,
-    stored_chunk_to_document,
 )
+from .keyword_repository import PgKeywordRepository
+from .pg_bm25_retriever import PgBM25Retriever
 from .rag import create_embeddings
 from .reranker import BaseReranker, QwenReranker
 from .rerank_retriever import RerankRetriever
@@ -62,17 +63,8 @@ class RetrievalService:
 
         repository = PgVectorRepository(session)
 
-        stored_chunks = repository.list_chunks(
-            scope=scope
-        )
-
-        if not stored_chunks:
+        if not repository.has_ready_chunks(scope=scope):
             return []
-
-        keyword_documents = [
-            stored_chunk_to_document(chunk)
-            for chunk in stored_chunks
-        ]
 
         vector_retriever = PgVectorRetriever(
             repository=repository,
@@ -83,7 +75,9 @@ class RetrievalService:
 
         hybrid_retriever = create_hybrid_retriever(
             vector_retriever=vector_retriever,
-            keyword_documents=keyword_documents,
+            keyword_retriever=PgBM25Retriever(
+                repository=PgKeywordRepository(session), scope=scope, k=FETCH_K,
+            ),
             k=FETCH_K,
             fetch_k=FETCH_K,
         )
@@ -98,4 +92,8 @@ class RetrievalService:
             },
         )
 
-        return retriever.invoke(query)
+        documents = retriever.invoke(query)
+        names = {str(kb_id): name for kb_id, name in scope.knowledge_base_names}
+        for document in documents:
+            document.metadata["knowledge_base_name"] = names.get(document.metadata.get("knowledge_base_id"))
+        return documents

@@ -36,6 +36,8 @@ class Citation(BaseModel):
     document_name: str
     section_path: str
     chunk_id: str | None = None
+    knowledge_base_id: UUID | None = None
+    knowledge_base_name: str | None = None
 
 
 class AnswerTimings(BaseModel):

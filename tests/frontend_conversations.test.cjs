@@ -114,3 +114,54 @@ test("logout clears the current conversation and recent conversation list", asyn
   assert.equal(run("state.conversationId"), null);
   assert.equal(run("state.conversations.length"), 0);
 });
+
+test("all-accessible mode uses global conversations and null KB, without enabling uploads", async () => {
+  const { $, run, requests, ask } = setup();
+  run('state.bases = [{ id: "kb1", name: "技术部", permission: "admin" }, { id: "kb2", name: "公共", permission: "viewer" }]');
+  await run("selectBase(null)");
+  assert.equal($("current-kb").textContent, "全部可访问知识库");
+  assert.equal($("question").disabled, false);
+  assert.equal($("upload-file").disabled, true);
+  assert.equal($("upload-button").disabled, true);
+  assert.equal($("kb-list").children.length, 3);
+  await ask("哪些资料适用？"); await ask("它的条件呢？");
+  const qa = requests.filter(r => r.url === "/api/qa");
+  assert.equal(qa[0].body.knowledge_base_id, null);
+  assert.equal(qa[0].body.conversation_id, qa[1].body.conversation_id);
+  assert.equal(requests.filter(r => r.url === "/api/conversations" && r.method === "POST").length, 1);
+  assert.equal(requests.some(r => r.url.includes("/documents")), false);
+  await run('selectBase({ id: "kb1", name: "技术部", permission: "admin" })');
+  assert.equal(run("state.conversationId"), null);
+  assert.equal($("upload-file").disabled, false);
+  await ask("仅在技术部查询");
+  assert.equal(requests.filter(r => r.url === "/api/qa").at(-1).body.knowledge_base_id, "kb1");
+});
+
+test("login defaults to all-accessible mode; no readable bases disables asking", async () => {
+  const { $, run, sandbox, requests } = setup();
+  const original = sandbox.fetch;
+  sandbox.fetch = async (url, options) => url === "/api/knowledge-bases"
+    ? { status: 200, ok: true, headers: new Headers(), json: async () => ({ items: [{ id: "kb1", name: "技术部", permission: "admin" }] }) }
+    : original(url, options);
+  await run("connect()");
+  assert.equal(run("state.kb"), null);
+  assert.equal($("question").disabled, false);
+  assert.equal(requests.some(r => r.url === "/api/conversations"), true);
+  run("state.bases = []; state.kb = null; updateControls()");
+  assert.equal($("question").disabled, true);
+  assert.equal($("ask-button").disabled, true);
+});
+
+test("switching from a loading single KB to all-accessible mode does not leave questions disabled", async () => {
+  const { $, run } = setup();
+  run('state.bases = [{ id: "kb1", name: "技术部", permission: "admin" }]; state.loading = true');
+  await run("selectBase(null)");
+  assert.equal(run("state.loading"), false);
+  assert.equal($("question").disabled, false);
+});
+
+test("cross-KB citations render the server KB name safely", () => {
+  const { $, run } = setup();
+  run('renderAnswer(message("assistant", ""), { answer: "结论", answerable: true, citations: [{ citation_id: "资料1", document_name: "手册", section_path: "条件", knowledge_base_name: "技术部<script>" }] })');
+  assert.equal($("answer-area").children.at(-1).querySelector(".citation").textContent, "[资料1] 技术部<script> · 手册 · 条件");
+});

@@ -11,11 +11,11 @@
 - Keycloak OIDC 登录、JWT 签名及 issuer、audience 校验
 - 租户、部门、用户和知识库四层权限模型
 - 用户授权与部门授权，支持 `viewer`、`editor` 和 `admin` 权限
-- 不可变 `RetrievalScope`，检索时强制携带 `tenant_id` 和 `knowledge_base_id`
+- 不可变 `RetrievalScope`，检索时强制携带 `tenant_id` 和后端计算的授权知识库范围
 - PostgreSQL 16、pgvector 0.8.6 和余弦距离 HNSW 索引
 - PDF、DOCX、TXT、Markdown 文档解析、切分和 1024 维向量入库
 - 文件内容未变化时跳过重复入库，更新失败时保留旧版本
-- 向量检索、BM25 关键词检索、融合和重排
+- pgvector 向量检索、pg_search 0.25.11 持久化 BM25、融合和重排
 - 可回答性判断、资料引用和拒答机制
 - 文档列表、上传、更新及删除 API
 - 租户级问答限流、并发限制及文档数量/存储配额
@@ -144,7 +144,7 @@ Copy-Item .env.example .env
 首次运行时，先启动 PostgreSQL 和 Keycloak：
 
 ```powershell
-docker compose up -d postgres keycloak
+docker compose up --build -d postgres keycloak
 docker compose ps
 ```
 
@@ -592,7 +592,7 @@ Authorization: Bearer <access_token>
 | `POST` | `/api/knowledge-bases/{knowledge_base_id}/indexing-jobs/{job_id}/retry` | editor | 人工重试最终失败任务 |
 | `DELETE` | `/api/knowledge-bases/{knowledge_base_id}/documents/{document_id}` | editor | 删除文档、分块和受管文件 |
 | `GET` | `/api/knowledge-bases/{knowledge_base_id}/audit-events` | admin | 查询租户隔离的知识库审计事件 |
-| `POST` | `/api/qa` | viewer | 在指定知识库范围内问答 |
+| `POST` | `/api/qa` | viewer | 默认在全部授权知识库内问答，也可指定单个知识库 |
 
 问答请求示例：
 
@@ -702,7 +702,7 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 
 ## 多轮对话
 
-知识问答页面支持新建、恢复和删除私人对话。对话按租户、用户和知识库隔离；切换知识库或退出登录会清除页面中的当前对话。重新登录后可从“最近对话”恢复历史。
+知识问答页面支持新建、恢复和删除私人对话。对话按租户、用户和检索模式隔离；单库对话仍绑定原知识库，全范围对话单独保存。切换范围或退出登录会清除页面中的当前对话。重新登录后可从“最近对话”恢复历史。
 
 启用前先迁移数据库，再重启 API 服务：
 
@@ -726,6 +726,74 @@ python -m alembic upgrade head
 
 历史内容属于敏感业务数据：审计只记录动作与统计，不包含问题、回答和正文；部署时仍需配置数据库访问控制、备份加密和历史保留策略。页面只展示最近 20 段对话、恢复最近 100 轮，更早记录可以通过分页接口读取。浏览器超时后请先恢复该对话确认是否已完成，再决定重试（目前没有请求幂等去重）。
 
+## 默认跨授权知识库问答
+
+登录后默认选中“全部可访问知识库”，无需先选部门即可提问。左侧的具体知识库是可选筛选；文档上传、删除和索引任务仍必须选择一个具体知识库。
+
+`POST /api/qa` 的 `knowledge_base_id` 可省略或传 `null`，后端根据登录身份重新计算同租户的公共知识库、部门授权和用户直接授权；指定 ID 时维持原单库模式。客户端不能自行提供授权知识库列表。没有任何可读知识库时返回 `403`，不会退化成无过滤搜索。
+
+```json
+{"question": "开放平台令牌过期后怎么处理？"}
+```
+
+多轮全范围模式使用 `POST/GET /api/conversations` 和 `GET/DELETE /api/conversations/{conversation_id}`，分页参数与单库接口一致。创建后将 `conversation_id` 传给问答接口，保持 `knowledge_base_id` 为空。原 `/api/knowledge-bases/{knowledge_base_id}/conversations` 接口及已有历史继续有效，两种模式的会话 ID 不能混用。
+
+向量检索和 BM25 都先按 `tenant_id + 授权知识库 ID 集合 + ready 文档` 过滤，再取候选；跨库共享原有 30 条候选/8 条重排结果预算，不会按知识库数量增加完整问答调用。每条引用新增 `knowledge_base_id` 和 `knowledge_base_name`，用于展示来源所属库。
+
+每轮历史保存当时的完整授权检索范围。后续权限缩小时，可能受影响的旧轮次及标题会被隐藏，追问改写只使用最后一个失效轮次之后的安全历史。此策略是保守的：即使旧回答只引用了其他库，只要该轮曾允许检索的某个库不再可访问，也会隐藏该轮；保存的数据库原始历史不会被删除。新增授权不会把历史对话变成单库对话，旧单库对话也不会自动扩大范围。
+
+新增迁移 `b8d0f2a4c607`：会话知识库字段允许为空，并添加轮次授权范围快照和跨库会话的租户外键。启用前停止 API/Worker 写入、执行 `python -m alembic upgrade head`，再重启服务并刷新页面。若数据库仍未完成前面的 BM25 迁移，请先按下面“已有环境升级”准备 pg_search 镜像，不要跳过迁移或手工修改 Alembic 版本号。回滚发现全范围会话时会拒绝执行，要求先导出并处理，避免静默丢失记录。
+
+## PostgreSQL 持久化 BM25
+
+正式问答链路使用 `pg_search 0.25.11` 的 BM25 索引，不再每次读取整个知识库并在 Python 内存中重建关键词索引。检索流程仍为：向量候选 30 条 + BM25 候选 30 条 → 加权 RRF（0.6 / 0.4）取 30 条 → Qwen 重排取 8 条；重排失败时保留原 RRF 降级行为。
+
+- 新增 `document_chunks.keyword_text`，保存 jieba 搜索分词后的文本；正文、引用和向量字段不变。
+- 入库、更新、历史回填、查询共用 `jieba-v1` 分词规则，保留中文词、数字、错误码和接口标识符；扩展使用 whitespace tokenizer，避免再次按英文规则切词。
+- 关键词查询绑定参数，并在同一条 SQL 中限制租户、知识库和 `ready` 文档，再排序取前 N 条；不会先取全局候选再做权限过滤。
+- BM25 索引由数据库持久化，分块的插入、更新、删除和回滚随数据库事务生效；不再维护独立内存缓存。
+- API 和 Worker 启动时检查扩展版本、预加载配置和索引状态。缺少扩展时明确报错，不会偷偷回退到全库扫描。Python BM25 工厂只保留给小型离线评估和单元测试。
+
+数据库镜像基于原来的 PostgreSQL 16 / Debian Bookworm / pgvector 0.8.6，额外安装固定版本、校验 SHA256 的 pg_search 安装包。支持 amd64 / arm64，保持原数据库主版本、数据目录和 Compose 数据卷不变。已有数据卷不会重新运行初始化脚本，所以 Compose 显式设置 `shared_preload_libraries=pg_search`。
+
+### 已有环境升级
+
+先备份数据库并确认备份可恢复，安排维护窗口，等待正在执行的索引和问答请求结束。以下步骤会重启数据库，并暂停 API/Worker；**不要删除数据卷，也不要更换 PostgreSQL 主版本**。
+
+在已安装新分支依赖的虚拟环境中执行（本机 `.env` 的 `DATABASE_URL` 应指向要升级的数据库）：
+
+```powershell
+docker compose build postgres api worker
+docker compose stop api worker
+docker compose up -d --no-deps postgres
+docker compose ps postgres
+# 确认数据库 healthy 后，再执行迁移。
+python -m alembic upgrade head
+docker compose up -d api worker
+```
+
+迁移会为现有分块按每批 500 条回填关键词文本，再建立索引；**无需重新上传文档，也不会重新调用 Embedding**。批处理控制的是内存，不是分批提交：整个迁移使用一个事务，DDL 和索引构建可能持锁，数据量大时应先在数据库副本演练耗时和磁盘需求。该迁移需要 Python 读取正文，不能使用 `alembic --sql` 离线生成回填。
+
+若迁移失败，不要启动新版本 API/Worker；先排查日志和数据库资源再重试。降级迁移只移除 BM25 索引和 `keyword_text`，保留正文、向量及共享的 pg_search 扩展；代码也必须同步回到旧分支，不能让新代码连接降级后的表结构。
+
+### 检索质量与验证
+
+旧内存 BM25 的统计范围是当前知识库，新索引的词频统计范围是整张分块表，因此排序不保证与旧实现完全一致；授权过滤仍然只返回指定租户和知识库内的有效分块。合并前应使用现有检索测试集复测召回和排序质量。本次不调整融合权重和重排参数，也不引入 Elasticsearch。
+
+修改分词规则或 jieba 词典时，需要新的分词版本并重新回填/重建关键词索引，不能仅改查询端。上线前还应核对所选 pg_search 版本的许可和部署要求。
+
+独立集成测试需先在专用测试数据库执行迁移，数据库名称必须以 `_test` 结尾；不要指向业务数据库：
+
+```powershell
+$env:BM25_TEST_DATABASE_URL = 'postgresql+psycopg://test_user:test_password@127.0.0.1:55433/enterprise_bm25_test'
+$env:RUN_BM25_INTEGRATION_TESTS = '1'
+python -m pytest tests/test_pg_bm25_integration.py -q
+```
+
+测试覆盖真实扩展的中文、数字/错误码匹配，租户与知识库过滤先于 LIMIT，非 ready 文档排除，以及分块更新、删除和回滚。CI 使用同一个数据库 Dockerfile 构建镜像，并运行 BM25 和原有 pgvector 集成测试。
+
+实现采用固定版本的 [pg_search v0.25.11](https://github.com/paradedb/paradedb/tree/v0.25.11)，索引与查询 API 参考该版本的 [create-index](https://github.com/paradedb/paradedb/blob/v0.25.11/docs/documentation/indexing/create-index.mdx)、[whitespace](https://github.com/paradedb/paradedb/blob/v0.25.11/docs/documentation/tokenizers/available-tokenizers/whitespace.mdx) 和 [match](https://github.com/paradedb/paradedb/blob/v0.25.11/docs/documentation/full-text/match.mdx) 文档。
+
 ## 当前项目边界
 
 项目目前适合本地开发、功能演示和技术方案验证，距离生产环境还需要继续补充：
@@ -736,7 +804,7 @@ python -m alembic upgrade head
 - OpenTelemetry 分布式追踪和跨服务 Trace 上下文
 - 上传频率控制和可视化审计管理后台
 - 数据库备份、恢复演练和滚动迁移策略
-- 大规模文档下的关键词索引优化和多节点容量测试
+- 大规模文档下的 BM25 参数调优、查询计划验证和多节点容量测试
 - 会话摘要、长期记忆、历史保留策略、知识库管理后台与更多交互功能
 
 ## 开发流程

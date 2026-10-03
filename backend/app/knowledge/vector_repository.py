@@ -110,8 +110,7 @@ class PgVectorRepository:
             .where(
                 DocumentChunk.tenant_id
                 == scope.tenant_id,
-                DocumentChunk.knowledge_base_id
-                == scope.knowledge_base_id,
+                scope.knowledge_base_filter(DocumentChunk.knowledge_base_id),
                 KnowledgeDocument.status == "ready",
             )
             .order_by(distance_expression)
@@ -148,6 +147,19 @@ class PgVectorRepository:
 
         return hits
 
+    def has_ready_chunks(self, *, scope: RetrievalScope) -> bool:
+        """Empty-scope check without loading the entire knowledge base."""
+        statement = select(DocumentChunk.id).join(KnowledgeDocument, and_(
+            KnowledgeDocument.tenant_id == DocumentChunk.tenant_id,
+            KnowledgeDocument.knowledge_base_id == DocumentChunk.knowledge_base_id,
+            KnowledgeDocument.id == DocumentChunk.document_id,
+        )).where(
+            DocumentChunk.tenant_id == scope.tenant_id,
+            scope.knowledge_base_filter(DocumentChunk.knowledge_base_id),
+            KnowledgeDocument.status == "ready",
+        ).limit(1)
+        return self._session.scalar(statement) is not None
+
     def list_chunks(
         self,
         *,
@@ -173,12 +185,10 @@ class PgVectorRepository:
             .where(
                 DocumentChunk.tenant_id
                 == scope.tenant_id,
-                DocumentChunk.knowledge_base_id
-                == scope.knowledge_base_id,
+                scope.knowledge_base_filter(DocumentChunk.knowledge_base_id),
                 KnowledgeDocument.tenant_id
                 == scope.tenant_id,
-                KnowledgeDocument.knowledge_base_id
-                == scope.knowledge_base_id,
+                scope.knowledge_base_filter(KnowledgeDocument.knowledge_base_id),
                 KnowledgeDocument.status == "ready",
             )
             .order_by(

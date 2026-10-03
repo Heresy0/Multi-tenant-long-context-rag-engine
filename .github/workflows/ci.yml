@@ -16,22 +16,6 @@ jobs:
     timeout-minutes: 20
 
     services:
-      postgres:
-        image: pgvector/pgvector:0.8.6-pg16-bookworm
-        env:
-          POSTGRES_DB: enterprise_knowledge_test
-          POSTGRES_USER: enterprise_app
-          POSTGRES_PASSWORD: enterprise_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd
-          "pg_isready -U enterprise_app
-          -d enterprise_knowledge_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-
       redis:
         image: redis:8.2.10-alpine
         ports:
@@ -46,12 +30,34 @@ jobs:
       DATABASE_URL: >-
         postgresql+psycopg://enterprise_app:enterprise_test@127.0.0.1:5432/enterprise_knowledge_test
       RUN_POSTGRES_INTEGRATION_TESTS: "1"
+      BM25_TEST_DATABASE_URL: >-
+        postgresql+psycopg://enterprise_app:enterprise_test@127.0.0.1:5432/enterprise_knowledge_test
+      RUN_BM25_INTEGRATION_TESTS: "1"
       REDIS_URL: redis://127.0.0.1:6379/0
       RUN_REDIS_INTEGRATION_TESTS: "1"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Build and start PostgreSQL with pgvector and pg_search
+        run: |
+          docker build -f docker/postgres/Dockerfile -t enterprise-postgres-ci .
+          docker run --detach --name enterprise-postgres-ci \
+            --publish 127.0.0.1:5432:5432 \
+            --tmpfs /var/lib/postgresql/data:rw \
+            -e POSTGRES_DB=enterprise_knowledge_test \
+            -e POSTGRES_USER=enterprise_app \
+            -e POSTGRES_PASSWORD=enterprise_test \
+            enterprise-postgres-ci postgres -c shared_preload_libraries=pg_search
+          for attempt in $(seq 1 30); do
+            if docker exec enterprise-postgres-ci pg_isready -U enterprise_app -d enterprise_knowledge_test; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs enterprise-postgres-ci
+          exit 1
 
       - name: Set up Python
         uses: actions/setup-python@v7

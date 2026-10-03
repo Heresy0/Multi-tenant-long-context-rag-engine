@@ -87,6 +87,8 @@ def make_document(
         id=chunk_id,
         page_content=content,
         metadata={
+            "tenant_id": str(TEST_SCOPE.tenant_id),
+            "knowledge_base_id": str(TEST_SCOPE.knowledge_base_id),
             "source": f"C:/docs/{name}.docx",
             "source_id": f"source-{chunk_id}",
             "document_id": str(
@@ -491,3 +493,31 @@ def test_model_prompt_contains_question_and_built_context(
     assert "月度可用性是多少？" in messages[1].content
     assert "[资料1]" in messages[1].content
     assert "99.2%" in messages[1].content
+
+
+@pytest.mark.parametrize("field,value", [("tenant_id", str(uuid4())), ("knowledge_base_id", str(uuid4())),
+                                         ("knowledge_base_id", None)])
+def test_unscoped_or_unauthorized_evidence_never_enters_model(monkeypatch, field, value):
+    document = make_document("不应发送的敏感资料")
+    document.metadata[field] = value
+    service, _, llm, _, _ = build_service(monkeypatch, model_result=AnswerDraft(answerable=True), documents=[document])
+    result = answer(service, "问题")
+    assert result.answerable is False
+    assert result.citations == []
+    assert llm.calls == []
+
+
+def test_cross_kb_answer_citations_and_context_preserve_source_scope(monkeypatch):
+    kb_id = uuid4()
+    scope = RetrievalScope(TEST_SCOPE.tenant_id, knowledge_base_ids={TEST_SCOPE.knowledge_base_id, kb_id})
+    documents = [make_document("条件甲", chunk_id="one"), make_document("条件乙", chunk_id="two")]
+    documents[0].metadata["knowledge_base_name"] = "公司公共知识库"
+    documents[1].metadata.update(knowledge_base_id=str(kb_id), knowledge_base_name="技术部知识库")
+    service, _, llm, _, _ = build_service(monkeypatch, documents=documents, model_result=AnswerDraft(
+        answerable=True, claims=[AnswerClaim(text="需要满足条件甲和条件乙", citations=["资料1", "资料2"])],
+    ))
+    result = service.answer("需要什么条件？", scope=scope, session=TEST_SESSION)
+    assert result.answerable is True
+    assert [c.knowledge_base_id for c in result.citations] == [TEST_SCOPE.knowledge_base_id, kb_id]
+    assert [c.knowledge_base_name for c in result.citations] == ["公司公共知识库", "技术部知识库"]
+    assert "知识库：技术部知识库" in llm.calls[0][1].content

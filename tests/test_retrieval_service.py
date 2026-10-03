@@ -13,6 +13,7 @@ from backend.app.knowledge.vector_repository import (
     StoredChunk,
     VectorSearchHit,
 )
+from backend.app.knowledge.keyword_repository import PgKeywordRepository, KeywordSearchHit
 
 
 class FakeEmbeddings(Embeddings):
@@ -70,13 +71,16 @@ class FakeRepository(PgVectorRepository):
         self.list_scopes: list[RetrievalScope] = []
         self.search_calls: list[dict] = []
 
+    def has_ready_chunks(self, *, scope: RetrievalScope) -> bool:
+        self.list_scopes.append(scope)
+        return bool(self.chunks)
+
     def list_chunks(
         self,
         *,
         scope: RetrievalScope,
     ) -> list[StoredChunk]:
-        self.list_scopes.append(scope)
-        return self.chunks
+        raise AssertionError("正式检索不应加载整个知识库的分块")
 
     def search(
         self,
@@ -156,6 +160,17 @@ def _service(
         "PgVectorRepository",
         create_repository,
     )
+
+    class FakeKeywords(PgKeywordRepository):
+        def search(self, query, *, scope, limit=30):
+            assert limit == 30
+            return [KeywordSearchHit(
+                chunk_id=c.chunk_id, document_id=c.document_id, tenant_id=c.tenant_id,
+                knowledge_base_id=c.knowledge_base_id, content=c.content,
+                document_name=c.document_name, source=c.source, metadata=c.metadata, score=1.5,
+            ) for c in repository.chunks]
+
+    monkeypatch.setattr(service_module, "PgKeywordRepository", FakeKeywords)
 
     service = RetrievalService(
         settings=object(),
@@ -250,3 +265,23 @@ def test_search_runs_scoped_pgvector_hybrid_and_rerank_pipeline(
     assert results[0].metadata["tenant_id"] == str(
         scope.tenant_id
     )
+
+
+def test_multi_scope_shares_budget_and_drops_out_of_scope_hits_before_reranking(monkeypatch):
+    tenant, kb1, kb2 = uuid4(), uuid4(), uuid4()
+    scope = RetrievalScope(tenant, knowledge_base_ids={kb1, kb2}, knowledge_base_names=((kb1, "公共"), (kb2, "技术")))
+    from dataclasses import replace
+    first = _stored_chunk(RetrievalScope(tenant, kb1))
+    second = replace(_stored_chunk(RetrievalScope(tenant, kb2)), chunk_id="two", content="第二库内容", metadata={"source_id": "two", "chunk_content_hash": "two"})
+    denied = replace(_stored_chunk(RetrievalScope(tenant, uuid4())), chunk_id="denied", content="不可发送的敏感内容")
+    foreign = replace(_stored_chunk(RetrievalScope(uuid4(), uuid4())), chunk_id="foreign", content="跨租户敏感内容")
+    chunks = [first, second, denied, foreign]
+    repository = FakeRepository(chunks, [_search_hit(c) for c in chunks])
+    service, embeddings, reranker, _ = _service(monkeypatch, repository)
+    results = service.search("跨库问题", scope=scope, session=object())
+    assert len(embeddings.queries) == 1
+    assert len(repository.search_calls) == 1
+    assert repository.search_calls[0]["limit"] == 30
+    assert set(reranker.calls[0]["documents"]) == {first.content, second.content}
+    assert reranker.calls[0]["top_n"] == 8
+    assert results[0].metadata["knowledge_base_name"] in {"公共", "技术"}

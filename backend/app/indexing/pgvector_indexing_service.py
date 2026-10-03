@@ -9,6 +9,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
+from ..knowledge.keyword_tokenizer import build_keyword_text
 
 from ..config import Settings
 from ..db.models import (
@@ -691,6 +692,7 @@ class PgVectorIndexingService:
                     document_id=document_id,
                     chunk_index=index,
                     content=chunk.page_content,
+                    keyword_text=build_keyword_text(chunk.page_content),
                     content_hash=content_hash,
                     parent_id=parent_id,
                     chunking_version=CHUNKING_VERSION,

@@ -96,6 +96,10 @@ class AnswerService:
             scope=scope,
             session=session,
         )
+        # 防御性校验：缺少来源范围或越权的分块不得进入上下文/生成模型。
+        documents = [document for document in documents if scope.contains(
+            document.metadata.get("tenant_id"), document.metadata.get("knowledge_base_id"),
+        )]
         timings["search_total_ms"] = _elapsed_ms(
             search_started
         )
@@ -298,6 +302,8 @@ class AnswerService:
                     document_name=item.document_name,
                     section_path=item.section_path,
                     chunk_id=item.chunk_id,
+                    knowledge_base_id=item.knowledge_base_id,
+                    knowledge_base_name=item.knowledge_base_name,
                 )
             )
 

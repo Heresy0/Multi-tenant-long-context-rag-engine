@@ -38,3 +38,8 @@ data/documents/
 
 # 本地压测原始结果
 data/load-tests/
+
+# 可重新生成的星海测试文档包与排版预览
+output/pdf/xinghai-tech-corpus/
+output/pdf/星海科技有限公司_知识库测试集.zip
+tmp/xinghai-corpus-qa/

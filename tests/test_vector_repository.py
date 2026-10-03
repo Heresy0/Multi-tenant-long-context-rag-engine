@@ -25,6 +25,23 @@ def _valid_embedding() -> list[float]:
     )
 
 
+@pytest.mark.parametrize("ids", [(), (uuid4(), uuid4())])
+def test_multi_scope_filters_before_limit_and_empty_scope_is_never_unrestricted(ids):
+    repository, session = _repository()
+    scope = RetrievalScope(tenant_id=uuid4(), knowledge_base_ids=ids)
+    repository.search(scope=scope, query_embedding=_valid_embedding(), limit=8)
+    statement = session.execute.call_args.args[0]
+    sql = str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert "document_chunks.knowledge_base_id IN" in sql
+    assert str(scope.tenant_id) in sql
+    assert "documents.status = 'ready'" in sql
+    assert sql.index("WHERE") < sql.index("ORDER BY") < sql.index("LIMIT")
+    for kb_id in ids:
+        assert str(kb_id) in sql
+    if not ids:
+        assert "1 != 1" in sql
+
+
 def _repository(
     rows: list[tuple] | None = None,
 ) -> tuple[PgVectorRepository, Mock]:
@@ -34,6 +51,23 @@ def _repository(
     )
 
     return PgVectorRepository(session), session
+
+
+@pytest.mark.parametrize("chunk_id,exists", [(None, False), ("c" * 64, True)])
+def test_ready_check_selects_only_one_id_in_the_authorized_scope(chunk_id, exists):
+    repository, session = _repository()
+    session.scalar.return_value = chunk_id
+    scope = RetrievalScope(tenant_id=uuid4(), knowledge_base_id=uuid4())
+    assert repository.has_ready_chunks(scope=scope) is exists
+    statement = session.scalar.call_args.args[0]
+    compiled = str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert compiled.startswith("SELECT document_chunks.id")
+    assert "document_chunks.content" not in compiled
+    assert str(scope.tenant_id) in compiled
+    assert str(scope.knowledge_base_id) in compiled
+    assert "documents.status = 'ready'" in compiled
+    assert "LIMIT 1" in compiled
+    session.execute.assert_not_called()
 
 
 def test_rejects_wrong_embedding_dimension() -> None:

@@ -968,6 +968,13 @@ class DocumentChunk(TimestampMixin, Base):
         nullable=False,
     )
 
+    keyword_text: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+
     content_hash: Mapped[str] = mapped_column(
         String(64),
         nullable=False,
@@ -1025,6 +1032,16 @@ class DocumentChunk(TimestampMixin, Base):
             "chunk_index >= 0",
             name="ck_document_chunks_index",
         ),
+        Index(
+            "ix_document_chunks_keyword_bm25",
+            "id",
+            text("(keyword_text::pdb.whitespace)"),
+            "tenant_id",
+            "knowledge_base_id",
+            "document_id",
+            postgresql_using="paradedb",
+            postgresql_with={"key_field": "'id'"},
+        ).ddl_if(dialect="postgresql"),
         Index(
             "ix_document_chunks_scope_document",
             "tenant_id",

@@ -400,6 +400,8 @@ def test_qa_returns_answer_with_citations(
                 "document_name": "服务等级协议",
                 "section_path": "服务抵扣",
                 "chunk_id": "chunk-1",
+                "knowledge_base_id": None,
+                "knowledge_base_name": None,
             }
         ],
         "refusal_reason": None,

@@ -66,7 +66,7 @@ class ConversationAnswerService:
         completed = False
         try:
             started = perf_counter()
-            history = store.turns(conversation_id, limit=HISTORY_TURNS)
+            history = store.turns(conversation_id, limit=HISTORY_TURNS, for_context=True)
             retrieval_question = self.resolver.resolve(question, history)
             # Bound model output even when an injected/test resolver is used.
             retrieval_question = ResolvedQuestion(question=retrieval_question).question

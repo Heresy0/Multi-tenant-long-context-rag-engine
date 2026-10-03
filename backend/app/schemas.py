@@ -19,7 +19,8 @@ class ChatResponse(BaseModel):
 
 
 class KnowledgeQuestionRequest(BaseModel):
-    knowledge_base_id: UUID
+    # 缺省或 null：所有当前可访问知识库；指定 ID：单库筛选。
+    knowledge_base_id: UUID | None = None
     conversation_id: UUID | None = None
     question: str = Field(
         min_length=1,

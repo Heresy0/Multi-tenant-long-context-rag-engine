@@ -96,4 +96,5 @@ class PgVectorRetriever(BaseRetriever):
         return [
             vector_search_hit_to_document(hit)
             for hit in hits
+            if hit.tenant_id == self.scope.tenant_id and hit.knowledge_base_id in self.scope.knowledge_base_ids
         ]

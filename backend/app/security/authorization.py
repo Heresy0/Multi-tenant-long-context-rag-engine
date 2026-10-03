@@ -123,9 +123,17 @@ class AuthorizationService:
         self,
         *,
         principal: Principal,
-        knowledge_base_id: UUID,
+        knowledge_base_id: UUID | None = None,
     ) -> RetrievalScope:
-        """验证知识库读取权限并生成不可变检索范围。"""
+        """每次请求重新授权；未指定知识库时仅检索当前可读的库。"""
+        if knowledge_base_id is None:
+            ids = self.list_readable_knowledge_base_ids(principal=principal)
+            if not ids:
+                raise AuthorizationDenied("没有可访问的知识库。")
+            return RetrievalScope(
+                tenant_id=principal.tenant_id, knowledge_base_ids=frozenset(ids),
+                knowledge_base_names=self._scope_names(principal.tenant_id, ids),
+            )
         self.require_permission(
             principal=principal,
             knowledge_base_id=knowledge_base_id,
@@ -135,7 +143,13 @@ class AuthorizationService:
         return RetrievalScope(
             tenant_id=principal.tenant_id,
             knowledge_base_id=knowledge_base_id,
+            knowledge_base_names=self._scope_names(principal.tenant_id, {knowledge_base_id}),
         )
+
+    def _scope_names(self, tenant_id, ids):
+        return tuple(self._session.execute(select(KnowledgeBase.id, KnowledgeBase.name).where(
+            KnowledgeBase.tenant_id == tenant_id, KnowledgeBase.id.in_(ids),
+        )).all())
 
     def can_access(
         self,
