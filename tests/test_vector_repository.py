@@ -36,6 +36,23 @@ def _repository(
     return PgVectorRepository(session), session
 
 
+@pytest.mark.parametrize("chunk_id,exists", [(None, False), ("c" * 64, True)])
+def test_ready_check_selects_only_one_id_in_the_authorized_scope(chunk_id, exists):
+    repository, session = _repository()
+    session.scalar.return_value = chunk_id
+    scope = RetrievalScope(tenant_id=uuid4(), knowledge_base_id=uuid4())
+    assert repository.has_ready_chunks(scope=scope) is exists
+    statement = session.scalar.call_args.args[0]
+    compiled = str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert compiled.startswith("SELECT document_chunks.id")
+    assert "document_chunks.content" not in compiled
+    assert str(scope.tenant_id) in compiled
+    assert str(scope.knowledge_base_id) in compiled
+    assert "documents.status = 'ready'" in compiled
+    assert "LIMIT 1" in compiled
+    session.execute.assert_not_called()
+
+
 def test_rejects_wrong_embedding_dimension() -> None:
     repository, session = _repository()
     scope = RetrievalScope(

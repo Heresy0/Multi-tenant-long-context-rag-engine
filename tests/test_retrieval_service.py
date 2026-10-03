@@ -13,6 +13,7 @@ from backend.app.knowledge.vector_repository import (
     StoredChunk,
     VectorSearchHit,
 )
+from backend.app.knowledge.keyword_repository import PgKeywordRepository, KeywordSearchHit
 
 
 class FakeEmbeddings(Embeddings):
@@ -70,13 +71,16 @@ class FakeRepository(PgVectorRepository):
         self.list_scopes: list[RetrievalScope] = []
         self.search_calls: list[dict] = []
 
+    def has_ready_chunks(self, *, scope: RetrievalScope) -> bool:
+        self.list_scopes.append(scope)
+        return bool(self.chunks)
+
     def list_chunks(
         self,
         *,
         scope: RetrievalScope,
     ) -> list[StoredChunk]:
-        self.list_scopes.append(scope)
-        return self.chunks
+        raise AssertionError("正式检索不应加载整个知识库的分块")
 
     def search(
         self,
@@ -156,6 +160,17 @@ def _service(
         "PgVectorRepository",
         create_repository,
     )
+
+    class FakeKeywords(PgKeywordRepository):
+        def search(self, query, *, scope, limit=30):
+            assert limit == 30
+            return [KeywordSearchHit(
+                chunk_id=c.chunk_id, document_id=c.document_id, tenant_id=c.tenant_id,
+                knowledge_base_id=c.knowledge_base_id, content=c.content,
+                document_name=c.document_name, source=c.source, metadata=c.metadata, score=1.5,
+            ) for c in repository.chunks]
+
+    monkeypatch.setattr(service_module, "PgKeywordRepository", FakeKeywords)
 
     service = RetrievalService(
         settings=object(),

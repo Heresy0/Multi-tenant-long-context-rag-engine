@@ -1,46 +1,12 @@
 from __future__ import annotations
 
-import re
-import unicodedata
-
-import jieba
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field
 
-
-
-SPECIAL_TOKEN_PATTERN = re.compile(
-    r"[a-z][a-z0-9]*(?:[-_][a-z0-9]+)+"
-    r"|\d+(?:\.\d+)?%?",
-    flags=re.IGNORECASE,
-)
-
-
-def tokenize_chinese(text: str) -> list[str]:
-    """适用于中文、数字、错误码和API标识的BM25分词。"""
-    normalized = unicodedata.normalize(
-        "NFKC",
-        text,
-    ).lower()
-
-    tokens = [
-        token.strip()
-        for token in jieba.cut_for_search(normalized)
-        if token.strip()
-        and re.search(
-            r"[a-z0-9\u4e00-\u9fff]",
-            token,
-        )
-    ]
-
-    # 加强百分比、HTTP状态码和Idempotency-Key等精确词
-    tokens.extend(
-        SPECIAL_TOKEN_PATTERN.findall(normalized)
-    )
-    return tokens
+from .keyword_tokenizer import tokenize_chinese
 
 
 def document_key(document: Document) -> str:
@@ -155,21 +121,20 @@ class HybridRetriever(BaseRetriever):
 def create_hybrid_retriever(
         *,
         vector_retriever: BaseRetriever,
-        keyword_documents: list[Document],
+        keyword_retriever: BaseRetriever | None = None,
+        keyword_documents: list[Document] | None = None,
         k: int = 8,
         fetch_k: int = 30,
 ) -> BaseRetriever:
-    """从通用向量检索器和关键词语料建立混合检索器。"""
-    if not keyword_documents:
-        raise RuntimeError(
-            "知识库为空，无法创建BM25检索器。"
+    """正式链路注入数据库关键词检索器；离线评估仍可传入小型语料。"""
+    if keyword_retriever is not None and keyword_documents is not None:
+        raise ValueError("不能同时提供关键词检索器和关键词语料。")
+    if keyword_retriever is None:
+        if not keyword_documents:
+            raise RuntimeError("知识库为空，无法创建BM25检索器。")
+        keyword_retriever = BM25Retriever.from_documents(
+            keyword_documents, preprocess_func=tokenize_chinese, k=fetch_k,
         )
-
-    keyword_retriever = BM25Retriever.from_documents(
-        keyword_documents,
-        preprocess_func=tokenize_chinese,
-        k=fetch_k,
-    )
 
     return HybridRetriever(
         vector_retriever=vector_retriever,

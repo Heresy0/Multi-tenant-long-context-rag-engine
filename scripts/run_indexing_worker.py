@@ -30,6 +30,7 @@ from backend.app.monitoring.metrics import (  # noqa: E402
 from backend.app.indexing.worker_heartbeat_service import (  # noqa: E402
     WorkerHeartbeatService,
 )
+from backend.app.knowledge.keyword_repository import verify_keyword_index  # noqa: E402
 
 
 logger = logging.getLogger("backend.app.indexing_worker")
@@ -94,6 +95,7 @@ def main() -> None:
     )
     session_factory = create_session_factory(engine)
     verify_database_connection(engine)
+    verify_keyword_index(engine)
     metrics_server, metrics_thread = start_http_server(
         settings.indexing_worker_metrics_port,
         addr="0.0.0.0",

@@ -30,6 +30,7 @@ from backend.app.indexing.pgvector_indexing_service import (
 from backend.app.security.retrieval_scope import (
     RetrievalScope,
 )
+from backend.app.knowledge.keyword_tokenizer import build_keyword_text
 
 
 class FakeEmbeddings(Embeddings):
@@ -210,6 +211,9 @@ def test_indexes_file_and_skips_unchanged_file(
     assert embeddings.document_calls == 1
     assert _count(session, KnowledgeDocument) == 1
     assert _count(session, DocumentChunk) == first_count
+    for chunk in session.scalars(select(DocumentChunk)):
+        assert chunk.keyword_text == build_keyword_text(chunk.content)
+        assert chunk.keyword_text
 
     document = session.scalar(
         select(KnowledgeDocument)

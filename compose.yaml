@@ -1,6 +1,11 @@
 services:
   postgres:
-    image: pgvector/pgvector:0.8.6-pg16-bookworm
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    image: enterprise-knowledge-postgres:pg16-vector0.8.6-search0.25.11
+    # Init scripts do not run for existing data volumes; preload explicitly.
+    command: ["postgres", "-c", "shared_preload_libraries=pg_search"]
     container_name: enterprise-knowledge-postgres
     restart: unless-stopped
     environment:

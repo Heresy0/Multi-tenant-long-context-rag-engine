@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from .config import Settings
 from .knowledge.retrieval_service import RetrievalService
+from .knowledge.keyword_repository import verify_keyword_index
 from .knowledge.answer_service import AnswerService
 from .knowledge.conversation_service import ConversationAnswerService, ConversationResolver
 from .api.conversations import router as conversations_router
@@ -79,6 +80,7 @@ async def lifespan(app: FastAPI):
         stack.callback(database_engine.dispose)
 
         verify_database_connection(database_engine)
+        verify_keyword_index(database_engine)
 
         redis_client = create_redis_client(
             settings.redis_url,

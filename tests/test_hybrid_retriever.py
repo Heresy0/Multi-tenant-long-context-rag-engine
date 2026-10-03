@@ -4,6 +4,7 @@ from langchain_core.callbacks import (
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field
+import pytest
 
 from backend.app.knowledge.hybrid_retriever import (
     HybridRetriever,
@@ -37,6 +38,22 @@ def make_document(name: str) -> Document:
             "chunk_content_hash": name,
         },
     )
+
+
+def test_injected_keyword_retriever_does_not_construct_in_memory_bm25(monkeypatch):
+    from backend.app.knowledge import hybrid_retriever as module
+
+    def forbid_memory_bm25(*args, **kwargs):
+        raise AssertionError("不应重建内存 BM25")
+
+    monkeypatch.setattr(module.BM25Retriever, "from_documents", forbid_memory_bm25)
+    keyword = StaticRetriever(documents=[make_document("database-hit")])
+    hybrid = create_hybrid_retriever(vector_retriever=StaticRetriever(documents=[]), keyword_retriever=keyword)
+    assert hybrid.keyword_retriever is keyword
+    assert len(hybrid.invoke("问题")) == 1
+    with pytest.raises(ValueError):
+        create_hybrid_retriever(vector_retriever=StaticRetriever(documents=[]),
+                                keyword_retriever=keyword, keyword_documents=[make_document("old")])
 
 
 def test_tokenizer_keeps_numbers_and_identifiers() -> None:
