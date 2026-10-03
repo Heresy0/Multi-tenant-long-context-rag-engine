@@ -465,6 +465,28 @@ docker compose exec api python scripts/bootstrap_tenant.py --help
 
 系统支持 `.pdf`、`.docx`、`.txt` 和 `.md` 文件。
 
+TXT 先清理 UTF-8 BOM、空字符与换行，按空行分段，识别明确的编号标题和
+`Q1`、`Q:`、`问：` 问答对；长段落使用 500 字、50 字重叠的二次切分。
+Markdown 按 `#` 标题和 Setext 标题建立章节路径，代码围栏内不识别标题；
+代码块保留缩进与语言标记，超长代码按行切分并为每块补完整围栏。表格按行
+切分并重复表头，列表条目与缩进说明尽量一起保留。TXT、Markdown 和 DOCX
+复用最终分块生成逻辑，统一附加文档名、章节、内容类型和父单元标识。
+
+当前切分版本为 `structured-v3`。版本升级不会自动重建已有索引，需要重新
+提交入库任务；再次入库时版本检查会使旧版本分块重新生成。
+
+PDF 入库采用渐进式处理：先清理重复页眉、页脚和页码，按标题与段落进行
+跨页切分，并为分块保留章节和起止页码；检测到表格或多栏内容时使用布局
+解析；页面只有图片而没有足够文本时自动使用 OCR。相关运行参数包括：
+
+- `PDF_LAYOUT_ENABLED`：是否启用表格和多栏解析，默认启用。
+- `PDF_OCR_ENABLED`：是否对图片页启用 OCR，默认启用。
+- `PDF_OCR_LANGUAGE`：Tesseract 语言，默认 `chi_sim+eng`。
+- `PDF_OCR_MIN_CHARACTERS`：低于该文本字符数时考虑 OCR，默认 `20`。
+- `POPPLER_PATH`、`TESSERACT_CMD`：非标准安装位置下的可执行文件路径。
+
+OCR 只会用于低文本量且包含图片的页面，普通文本型 PDF 不承担 OCR 开销。
+
 ### 通过 API 上传
 
 取得访问令牌后，可以在 Swagger 页面点击 **Authorize**，然后调用：

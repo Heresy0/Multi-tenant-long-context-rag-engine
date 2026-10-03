@@ -6,6 +6,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        poppler-utils \
+        tesseract-ocr \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system app \
     && useradd \
         --system \
