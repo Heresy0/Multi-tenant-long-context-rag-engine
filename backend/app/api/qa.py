@@ -13,6 +13,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from ..knowledge.answer_service import AnswerService
+from ..knowledge.conversations import ConversationBusy, ConversationNotFound
 from ..audit_service import AuditService
 from ..db.dependencies import get_database_session
 from ..schemas import (
@@ -112,6 +113,7 @@ def concurrency_headers(
 @router.post(
     "",
     response_model=KnowledgeQuestionResponse,
+    response_model_exclude_unset=True,
 )
 def answer_question(
     payload: KnowledgeQuestionRequest,
@@ -244,20 +246,28 @@ def answer_question(
         ):
             response.headers[header] = value
 
-        result = answer_service.answer(
-            payload.question,
-            scope=scope,
-            session=session,
-        )
-        commit_audit(
-            outcome="success",
-            details={
-                "answerable": result.answerable,
-                "citation_count": len(
-                    result.citations
-                ),
-            },
-        )
+        def record_answer_success(result):
+            commit_audit(outcome="success", details={
+                "answerable": result.answerable, "citation_count": len(result.citations),
+            })
+
+        conversation_fields = {}
+        if payload.conversation_id is not None:
+            result, context_ms = request.app.state.conversation_answer_service.answer(
+                payload.question, conversation_id=payload.conversation_id,
+                principal=principal, scope=scope, session=session, commit_success=record_answer_success,
+            )
+            conversation_fields = {
+                "conversation_id": payload.conversation_id,
+                "conversation_context_ms": context_ms,
+            }
+        else:
+            result = answer_service.answer(
+                payload.question,
+                scope=scope,
+                session=session,
+            )
+            record_answer_success(result)
 
         timing_fields = (
             result.timings.model_dump()
@@ -285,8 +295,20 @@ def answer_question(
         )
 
         return KnowledgeQuestionResponse(
-            **result.model_dump()
+            **result.model_dump(), **conversation_fields
         )
+
+    except (ConversationNotFound, ConversationBusy) as exc:
+        missing = isinstance(exc, ConversationNotFound)
+        commit_audit(outcome="denied" if missing else "invalid")
+        record_qa_request(
+            outcome="denied" if missing else "invalid", answerable=None,
+            duration_seconds=perf_counter() - started,
+        )
+        raise HTTPException(
+            status_code=404 if missing else 409, detail=str(exc),
+            headers={"X-Request-ID": request_id},
+        ) from exc
 
     except TenantRateLimitExceeded as exc:
         decision = exc.decision

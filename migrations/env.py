@@ -8,6 +8,7 @@ from backend.app.db.base import Base
 
 # 导入模型，使 SQLAlchemy 将表注册到 Base.metadata。
 import backend.app.db.models  # noqa: F401
+import backend.app.db.conversation_models  # noqa: F401
 
 
 config = context.config

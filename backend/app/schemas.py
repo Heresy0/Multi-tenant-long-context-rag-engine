@@ -20,6 +20,7 @@ class ChatResponse(BaseModel):
 
 class KnowledgeQuestionRequest(BaseModel):
     knowledge_base_id: UUID
+    conversation_id: UUID | None = None
     question: str = Field(
         min_length=1,
         max_length=1000,
@@ -27,7 +28,8 @@ class KnowledgeQuestionRequest(BaseModel):
 
 
 class KnowledgeQuestionResponse(AnswerResult):
-    pass
+    conversation_id: UUID | None = None
+    conversation_context_ms: float | None = None
 
 
 class KnowledgeBaseSummary(BaseModel):

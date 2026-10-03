@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from .config import Settings
 from .knowledge.retrieval_service import RetrievalService
 from .knowledge.answer_service import AnswerService
+from .knowledge.conversation_service import ConversationAnswerService, ConversationResolver
+from .api.conversations import router as conversations_router
 from .api.qa import router as qa_router
 from .api.system import router as system_router
 from .api.frontend import router as frontend_router
@@ -113,6 +115,9 @@ async def lifespan(app: FastAPI):
         )
 
         app.state.answer_service = answer_service
+        app.state.conversation_answer_service = ConversationAnswerService(
+            answer_service, ConversationResolver(settings),
+        )
 
         yield
 
@@ -126,6 +131,7 @@ app = FastAPI(
 app.middleware("http")(observe_http_request)
 
 app.include_router(qa_router)
+app.include_router(conversations_router)
 app.include_router(knowledge_base_router)
 app.include_router(system_router)
 app.include_router(frontend_router)

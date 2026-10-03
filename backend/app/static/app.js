@@ -3,7 +3,7 @@ import { AuthSession } from "./auth.js";
 const $ = id => document.getElementById(id);
 const statuses = { ready: "已就绪", pending: "等待索引", queued: "排队中", running: "索引中", succeeded: "已完成", failed: "失败", cancelled: "已取消" };
 const permissions = { viewer: "只读", editor: "可编辑", admin: "管理员" };
-const state = { auth: null, config: null, bases: [], kb: null, documents: [], jobs: [], revision: 0, tab: "qa", asking: false, uploading: false, loading: false, polling: null, deleting: null };
+const state = { auth: null, config: null, bases: [], kb: null, documents: [], jobs: [], conversations: [], conversationId: null, revision: 0, tab: "qa", asking: false, uploading: false, loading: false, polling: null, deleting: null };
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -26,6 +26,8 @@ function updateControls() {
   $("question").disabled = !state.kb || state.asking || state.loading;
   $("ask-button").disabled = !state.kb || state.asking || state.loading;
   $("ask-button").firstChild.textContent = state.asking ? "生成中… " : "发送问题 ";
+  for (const id of ["new-conversation", "conversation-list"]) $(id).disabled = !state.kb || state.asking || state.loading;
+  $("delete-conversation").disabled = !state.conversationId || state.asking || state.loading;
   $("upload-file").disabled = !editable() || state.uploading || state.loading;
   $("upload-button").disabled = !editable() || !$("upload-file").files.length || state.uploading || state.loading;
   $("upload-button").textContent = state.uploading ? "正在上传…" : "上传并索引";
@@ -59,6 +61,7 @@ function resetWorkspace() {
   state.revision += 1;
   clearTimeout(state.polling);
   state.bases = []; state.kb = null; state.documents = []; state.jobs = [];
+  state.conversations = []; renderConversations();
   state.loading = false;
   $("kb-list").replaceChildren(element("p", "登录后查看可访问的知识库", "sidebar-empty"));
   $("kb-count").textContent = "—";
@@ -70,6 +73,8 @@ function resetWorkspace() {
   clearConversation(); renderDocuments(); renderJobs(); updateControls();
 }
 function clearConversation() {
+  state.conversationId = null;
+  $("conversation-list").value = "";
   const welcome = $("welcome");
   $("answer-area").replaceChildren(welcome);
   welcome.hidden = false;
@@ -105,13 +110,59 @@ async function selectBase(kb) {
   state.revision += 1;
   clearTimeout(state.polling);
   state.kb = kb; state.documents = []; state.jobs = [];
+  state.conversations = []; renderConversations();
   $("current-kb").textContent = kb.name;
   $("document-kb").textContent = kb.name;
   $("permission").textContent = permissions[kb.permission] || kb.permission;
   $("upload-form").reset();
   $("selected-file").textContent = editable() ? "尚未选择文件" : "你拥有只读权限，可查看文档和提问。";
   clearConversation(); renderBases(); renderDocuments(); renderJobs(); notice(); updateControls();
-  await refreshDocuments();
+  await Promise.all([refreshDocuments(), refreshConversations()]);
+}
+function conversationPath() { return `/api/knowledge-bases/${state.kb.id}/conversations`; }
+function renderConversations() {
+  const select = $("conversation-list");
+  const first = element("option", "新对话"); first.value = "";
+  select.replaceChildren(first);
+  for (const item of state.conversations) {
+    const option = element("option", item.title); option.value = item.id; select.append(option);
+  }
+  select.value = state.conversationId || "";
+}
+async function refreshConversations() {
+  if (!state.kb) return;
+  const revision = state.revision;
+  try {
+    const { data } = await api(conversationPath());
+    if (!sameContext(revision)) return;
+    state.conversations = data.items; renderConversations();
+  } catch (error) { if (sameContext(revision)) errorNotice(error); }
+}
+function renderAnswer(container, data, requestId) {
+  const answer = container.querySelector(".message-text"); answer.classList.remove("loading"); answer.textContent = data.answer;
+  if (!data.answerable && data.refusal_reason) container.append(element("p", data.refusal_reason, "answer-meta"));
+  const citations = element("div", undefined, "citation-list");
+  for (const citation of data.citations || []) citations.append(element("div", `[${citation.citation_id}] ${citation.document_name} · ${citation.section_path}`, "citation"));
+  container.append(citations);
+  const seconds = data.timings ? `${(data.timings.total_ms / 1000).toFixed(1)} 秒 · ` : "";
+  container.append(element("div", `${seconds}${data.citations?.length || 0} 个来源${requestId ? ` · 请求编号 ${requestId}` : ""}`, "answer-meta"));
+}
+async function restoreConversation(id) {
+  if (!id) { clearConversation(); updateControls(); return; }
+  const revision = ++state.revision;
+  const previousId = state.conversationId;
+  state.loading = true; updateControls(); notice();
+  try {
+    const { data } = await api(`${conversationPath()}/${id}`);
+    if (!sameContext(revision)) return;
+    clearConversation(); state.conversationId = id; $("conversation-list").value = id;
+    for (const turn of data.turns) {
+      message("user", turn.question); renderAnswer(message("assistant", ""), turn.result);
+    }
+    if (data.next_before) notice("当前显示最近 100 轮，追问使用最近 6 轮上下文。");
+  } catch (error) {
+    if (revision === state.revision) { $("conversation-list").value = previousId || ""; errorNotice(error); }
+  } finally { if (revision === state.revision) { state.loading = false; updateControls(); } }
 }
 async function refreshDocuments(automatic = false) {
   if (!state.kb) return;
@@ -235,6 +286,18 @@ $("token-form").addEventListener("submit", async event => {
   catch (error) { $("login-help").textContent = error.message; }
 });
 $("refresh-button").addEventListener("click", () => refreshDocuments());
+$("new-conversation").addEventListener("click", () => { clearConversation(); updateControls(); notice("已开始新对话，发送问题后自动保存。追问使用最近 6 轮上下文。"); });
+$("conversation-list").addEventListener("change", event => restoreConversation(event.target.value));
+$("delete-conversation").addEventListener("click", async () => {
+  if (!state.conversationId || state.asking || !window.confirm("删除这段对话及其全部历史？此操作无法撤销。")) return;
+  const revision = state.revision;
+  state.loading = true; updateControls();
+  try {
+    await api(`${conversationPath()}/${state.conversationId}`, { method: "DELETE" });
+    if (sameContext(revision)) { clearConversation(); await refreshConversations(); notice("对话记录已删除。"); }
+  } catch (error) { if (revision === state.revision) errorNotice(error); }
+  finally { if (revision === state.revision) { state.loading = false; updateControls(); } }
+});
 $("upload-file").addEventListener("change", () => { $("selected-file").textContent = $("upload-file").files[0]?.name || "尚未选择文件"; updateControls(); });
 $("upload-form").addEventListener("submit", async event => {
   event.preventDefault();
@@ -269,25 +332,23 @@ $("delete-confirm").addEventListener("click", async () => {
 $("question-form").addEventListener("submit", async event => {
   event.preventDefault();
   const question = $("question").value.trim();
-  if (!question || !state.kb || state.asking) return;
+  if (!question || !state.kb || state.asking || state.loading) return;
   const revision = state.revision;
   state.asking = true; updateControls(); notice();
   message("user", question); $("question").value = "";
   const pending = message("assistant", "正在检索资料并生成答案，请稍候…");
   pending.querySelector(".message-text").classList.add("loading");
   try {
-    const { data, requestId } = await api("/api/qa", { method: "POST", body: JSON.stringify({ knowledge_base_id: state.kb.id, question }) });
-    if (!sameContext(revision)) return;
-    const answer = pending.querySelector(".message-text"); answer.classList.remove("loading"); answer.textContent = data.answer;
-    if (!data.answerable && data.refusal_reason) pending.append(element("p", data.refusal_reason, "answer-meta"));
-    const citations = element("div", undefined, "citation-list");
-    for (const citation of data.citations || []) {
-      const node = element("div", `[${citation.citation_id}] ${citation.document_name} · ${citation.section_path}`, "citation");
-      citations.append(node);
+    if (!state.conversationId) {
+      const { data } = await api(conversationPath(), { method: "POST" });
+      if (!sameContext(revision)) return;
+      state.conversationId = data.id;
+      state.conversations.unshift(data); renderConversations();
     }
-    pending.append(citations);
-    const seconds = data.timings ? `${(data.timings.total_ms / 1000).toFixed(1)} 秒 · ` : "";
-    pending.append(element("div", `${seconds}${data.citations?.length || 0} 个来源${requestId ? ` · 请求编号 ${requestId}` : ""}`, "answer-meta"));
+    const { data, requestId } = await api("/api/qa", { method: "POST", body: JSON.stringify({ knowledge_base_id: state.kb.id, question, conversation_id: state.conversationId }) });
+    if (!sameContext(revision)) return;
+    renderAnswer(pending, data, requestId);
+    await refreshConversations();
   } catch (error) {
     if (revision === state.revision) {
       if (!state.auth.authenticated) errorNotice(error);
