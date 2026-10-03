@@ -700,6 +700,32 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 - 删除接口同时清理数据库文档记录、向量分块和受管文件。
 - 删除服务只允许删除受管文档目录中的文件，不会删除原始样例文件。
 
+## 多轮对话
+
+知识问答页面支持新建、恢复和删除私人对话。对话按租户、用户和知识库隔离；切换知识库或退出登录会清除页面中的当前对话。重新登录后可从“最近对话”恢复历史。
+
+启用前先迁移数据库，再重启 API 服务：
+
+```powershell
+python -m alembic upgrade head
+```
+
+接口使用方法：
+
+1. `POST /api/knowledge-bases/{knowledge_base_id}/conversations` 创建对话，得到 `id`。
+2. `POST /api/qa` 传入 `knowledge_base_id`、`question` 和 `conversation_id`，后续追问复用同一 ID。
+3. `GET /api/knowledge-bases/{knowledge_base_id}/conversations` 获取当前用户最近的对话（默认 20 条，支持 `limit` / `offset`）。
+4. `GET /api/knowledge-bases/{knowledge_base_id}/conversations/{conversation_id}` 恢复历史（默认最近 100 轮，支持 `limit` / `before`；`next_before` 用于继续读取更早的记录）。
+5. `DELETE /api/knowledge-bases/{knowledge_base_id}/conversations/{conversation_id}` 删除对话及其全部历史。
+
+不传 `conversation_id` 的 `/api/qa` 请求仍是原来的单轮问答，不保存历史，保持原响应字段。多轮响应增加 `conversation_id` 和 `conversation_context_ms`，原 `timings.total_ms` 包含上下文处理耗时。
+
+追问处理使用最近 **6 轮** 的问题、独立检索问题和有长度限制的回答，先改写为独立问题，再运行原有的授权范围检索、答案生成和引用校验。第一轮不调用改写模型。历史回答只用于识别指代与话题，**不会直接作为答案证据**；每轮仍必须重新检索当前知识库。改写复用现有 `DASHSCOPE_MODEL` / `DASHSCOPE_BASE_URL` / `DASHSCOPE_API_KEY` 配置，追问通常增加一次模型调用。
+
+完整问答和引用保存在 PostgreSQL；窗口外的历史仍可查看，但不会进入当前模型上下文。本版是会话级短期记忆，不含长期用户画像、自动摘要或跨对话记忆。同一对话的并发写入返回 `409`；超时租约可自动恢复，旧请求不能覆盖新历史。模型、检索或成功审计失败时不写入半轮对话。每次读写历史和提问都会重新检查当前知识库权限，权限撤销后不能继续访问。
+
+历史内容属于敏感业务数据：审计只记录动作与统计，不包含问题、回答和正文；部署时仍需配置数据库访问控制、备份加密和历史保留策略。页面只展示最近 20 段对话、恢复最近 100 轮，更早记录可以通过分页接口读取。浏览器超时后请先恢复该对话确认是否已完成，再决定重试（目前没有请求幂等去重）。
+
 ## 当前项目边界
 
 项目目前适合本地开发、功能演示和技术方案验证，距离生产环境还需要继续补充：
@@ -711,7 +737,7 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 - 上传频率控制和可视化审计管理后台
 - 数据库备份、恢复演练和滚动迁移策略
 - 大规模文档下的关键词索引优化和多节点容量测试
-- 前端会话持久化、知识库管理后台与更多交互功能
+- 会话摘要、长期记忆、历史保留策略、知识库管理后台与更多交互功能
 
 ## 开发流程
 
