@@ -139,6 +139,12 @@ Remove-Item Env:ENTERPRISE_KB_ACCESS_TOKEN
 
 原始报告：[技术部知识库独立答案测试](reports/answer_test_technical_v1.json)。
 
+## 当前分层评估入口
+
+新增 `scripts/evaluate_system.py`，支持离线解析/隔离权限回归、真实授权后端分层评估、真实HTTP多轮/部分权限评估、过程记录回放及性能报告汇总。默认不调用真实模型、不修改业务授权。具体范围、运行命令与未覆盖项见 [分层评估说明](SYSTEM_EVALUATION.md)。
+
+星海部门版30份语料对应题集位于 `evals/xinghai_v3/`；题集与标准答案不要入库。当前分层入口与下面保留的历史Chroma实验不是同一个基线。
+
 ## 历史检索实验
 
 以下检索报告来自切换 pgvector 之前的 Chroma 基线实验，仅用于保存算法演进记录。旧的 `scripts/inspect_retrieval.py` 已随 Chroma 正式链路删除，不能再用这些命令运行当前系统。当前 pgvector 链路应通过受保护的 `/api/qa` 和上述答案评估脚本进行测量。

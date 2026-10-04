@@ -521,3 +521,48 @@ def test_cross_kb_answer_citations_and_context_preserve_source_scope(monkeypatch
     assert [c.knowledge_base_id for c in result.citations] == [TEST_SCOPE.knowledge_base_id, kb_id]
     assert [c.knowledge_base_name for c in result.citations] == ["公司公共知识库", "技术部知识库"]
     assert "知识库：技术部知识库" in llm.calls[0][1].content
+
+
+@pytest.mark.parametrize("proposed,answerable", [("130.30", True), ("999", False)])
+def test_calculation_is_program_rendered_traced_and_verified_once_by_model(monkeypatch, proposed, answerable):
+    from backend.app.evaluation.trace import capture_trace
+    draft = AnswerDraft.model_validate({"answerable": True, "claims": [{
+        "text": "模型附带了未经支持的描述999999元", "citations": ["资料1"],
+        "calculation": {"operation": "money_sum", "result": proposed, "inputs": [
+            {"source": "资料1", "quote": "100.20元", "value": "100.20", "unit": "元"},
+            {"source": "资料1", "quote": "30.10元", "value": "30.10", "unit": "元"}]}}]})
+    service, _, llm, _, _ = build_service(monkeypatch, model_result=draft,
+                                         documents=[make_document("项目甲100.20元；项目乙30.10元。")])
+    with capture_trace() as trace:
+        result = answer(service, "这两个项目金额合计是多少？")
+    assert result.answerable is answerable
+    assert len(llm.calls) == 1
+    assert "999999" not in result.answer
+    record = trace.stages["calculations"][0]
+    if answerable:
+        assert "100.20元 + 30.10元 = 130.3元" in result.answer
+        assert result.citations[0].citation_id == "资料1"
+        assert record["status"] == "verified" and record["result"] == "130.3"
+    else:
+        assert "程序复算不一致" in result.refusal_reason
+        assert result.citations == [] and record["status"] == "rejected"
+
+
+def test_header_first_documents_send_rule_body_to_model_and_preserve_citation(monkeypatch):
+    from backend.app.evaluation.trace import capture_trace
+    texts = ["投递规范", "示例科技有限公司", "版本：1.0；生效日期：2026年10月1日。",
+             "虚构测试资料，仅用于开发，不具有实际法律效力。",
+             "首次投递后HTTP 429或5xx触发重试；其他4xx直接进入失败待核查。"]
+    docs = [make_document("文档：投递规范\n章节：" + ("文档说明" if i < 4 else "成功与重试")
+                         + "\n\n" + text, name="投递规范", section="" if i < 4 else "成功与重试",
+                         chunk_id=f"part-{i}") for i, text in enumerate(texts)]
+    for doc in docs:
+        doc.metadata["source_id"] = "shared-source"
+    service, _, llm, _, _ = build_service(monkeypatch, documents=docs, model_result=AnswerDraft(
+        answerable=True, claims=[AnswerClaim(text="401属于其他4xx，进入失败待核查。", citations=["资料1"])]))
+    with capture_trace() as trace:
+        result = answer(service, "Webhook返回401状态码时，会自动重试吗？")
+    assert "其他4xx直接进入失败待核查" in llm.calls[0][1].content
+    assert len(llm.calls) == 1 and result.answerable
+    assert result.citations[0].chunk_id == "part-4"
+    assert trace.stages["context"][0]["evidence_role"] == "content"

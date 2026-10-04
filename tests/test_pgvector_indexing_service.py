@@ -171,6 +171,56 @@ def _count(
     ) or 0
 
 
+def test_policy_persistence_legacy_read_and_scope_guards(session, scope_data, tmp_path):
+    from copy import deepcopy
+    from backend.app.knowledge.vector_repository import PgVectorRepository
+    path = tmp_path / "Webhook规范.txt"
+    path.write_text("文档编号: RULE-B\n版本: 1.4\n生效日期: 2026年7月1日\n规则正文。", encoding="utf-8")
+    service = PgVectorIndexingService(session=session, settings=_settings(), embeddings=FakeEmbeddings())
+    scopes = [RetrievalScope(scope_data.tenant_id, knowledge_base_id=kb) for kb in
+              (scope_data.technology_kb_id, scope_data.hr_kb_id)]
+    for scope in scopes:
+        service.index_file(file_path=path, scope=scope, created_by_user_id=scope_data.user_id)
+    documents = list(session.scalars(select(KnowledgeDocument)))
+    own = next(doc for doc in documents if doc.knowledge_base_id == scope_data.technology_kb_id)
+    assert own.metadata_json["policy"]["effective_from"] == "2026-07-01"
+    for chunk in session.scalars(select(DocumentChunk)):
+        assert chunk.metadata_json["policy"]["business_version"] == "1.4"
+    own.metadata_json = {k: v for k, v in own.metadata_json.items() if k != "policy"}
+    session.commit()  # Emulate a ready legacy index without document policy metadata.
+    before = deepcopy(own.metadata_json)
+    repository = PgVectorRepository(session)
+    ids = [doc.id for doc in documents]
+    policies = repository.candidate_policies(scope=scopes[0], document_ids=ids)
+    assert set(policies) == {str(own.id)}
+    assert policies[str(own.id)]["business_version"] == "1.4"
+    assert own.metadata_json == before and not session.dirty
+    assert repository.candidate_policies(scope=scopes[0], document_ids=[]) == {}
+    foreign = RetrievalScope(uuid4(), knowledge_base_id=scope_data.technology_kb_id)
+    assert repository.candidate_policies(scope=foreign, document_ids=ids) == {}
+    own.status = "failed"
+    session.commit()
+    assert repository.candidate_policies(scope=scopes[0], document_ids=ids) == {}
+
+
+def test_reindex_refreshes_source_policy_but_preserves_governed_relations(session, scope_data, tmp_path):
+    path = tmp_path / "规范.txt"
+    path.write_text("文档编号: RULE-B\n版本: 1.4\n生效日期: 2026年7月1日", encoding="utf-8")
+    service = PgVectorIndexingService(session=session, settings=_settings(), embeddings=FakeEmbeddings())
+    scope = RetrievalScope(scope_data.tenant_id, knowledge_base_id=scope_data.technology_kb_id)
+    service.index_file(file_path=path, scope=scope, created_by_user_id=scope_data.user_id)
+    doc = session.scalar(select(KnowledgeDocument))
+    doc.metadata_json = {**doc.metadata_json, "policy": {**doc.metadata_json["policy"],
+                         "rule_scope": "Webhook重试", "supersedes": ["RULE-A"]}}
+    session.commit()
+    path.write_text("文档编号: RULE-B\n版本: 1.5\n生效日期: 2026年8月1日", encoding="utf-8")
+    service.index_file(file_path=path, scope=scope, created_by_user_id=scope_data.user_id)
+    assert doc.metadata_json["policy"]["business_version"] == "1.5"
+    assert doc.metadata_json["policy"]["effective_from"] == "2026-08-01"
+    assert doc.metadata_json["policy"]["supersedes"] == ["RULE-A"]
+    assert doc.metadata_json["policy"]["rule_scope"] == "Webhook重试"
+
+
 def test_indexes_file_and_skips_unchanged_file(
     session: Session,
     scope_data: ScopeData,

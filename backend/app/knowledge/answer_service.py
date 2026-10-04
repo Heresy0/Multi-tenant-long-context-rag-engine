@@ -14,6 +14,7 @@ from .answer_models import (
     Citation,
 )
 from .answer_validation import AnswerValidator
+from .calculation_service import CalculationError, compute
 from ..config import Settings
 from .context_builder import (
     BuiltContext,
@@ -22,6 +23,7 @@ from .context_builder import (
 from .prompts import ANSWER_SYSTEM_PROMPT
 from .retrieval_service import RetrievalService
 from ..security.retrieval_scope import RetrievalScope
+from ..evaluation.trace import record_context, record_documents, record_scope, record_calculations
 
 
 REFUSAL_TEXT = (
@@ -78,6 +80,7 @@ class AnswerService:
 
         if not question:
             raise ValueError("问题不能为空")
+        record_scope(question, scope)
 
         total_started = time.perf_counter()
         timings: dict[str, float | None] = {
@@ -100,6 +103,7 @@ class AnswerService:
         documents = [document for document in documents if scope.contains(
             document.metadata.get("tenant_id"), document.metadata.get("knowledge_base_id"),
         )]
+        record_documents("authorized_final", documents)
         timings["search_total_ms"] = _elapsed_ms(
             search_started
         )
@@ -119,8 +123,9 @@ class AnswerService:
 
         context_started = time.perf_counter()
         context = self._context_builder.build(
-            documents
+            documents, question=question,
         )
+        record_context(context)
         timings["context_build_ms"] = _elapsed_ms(
             context_started
         )
@@ -149,6 +154,18 @@ class AnswerService:
         )
 
         validation_started = time.perf_counter()
+        calculation_records = []
+        for claim in draft.claims:
+            if claim.calculation is None:
+                continue
+            try:
+                calculation = compute(claim, context, question)
+                claim.text = calculation.rendered_text
+                calculation_records.append(dict(operation=claim.calculation.operation, status="verified",
+                                                result=calculation.result, inputs=list(calculation.inputs)))
+            except CalculationError as exc:
+                calculation_records.append(dict(operation=claim.calculation.operation, status="rejected", reason=str(exc)))
+        record_calculations(calculation_records)
         validation = self._validator.validate(
             draft=draft,
             context=context,

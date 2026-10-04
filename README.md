@@ -794,6 +794,10 @@ python -m pytest tests/test_pg_bm25_integration.py -q
 
 实现采用固定版本的 [pg_search v0.25.11](https://github.com/paradedb/paradedb/tree/v0.25.11)，索引与查询 API 参考该版本的 [create-index](https://github.com/paradedb/paradedb/blob/v0.25.11/docs/documentation/indexing/create-index.mdx)、[whitespace](https://github.com/paradedb/paradedb/blob/v0.25.11/docs/documentation/tokenizers/available-tokenizers/whitespace.mdx) 和 [match](https://github.com/paradedb/paradedb/blob/v0.25.11/docs/documentation/full-text/match.mdx) 文档。
 
+## 业务版本选择与受限计算
+
+正式问答链已增加业务有效期元数据、候选版本选择与来源绑定的时间/金额计算校验。单轮和多轮共用这些能力，保留原有向量、PostgreSQL BM25、RRF 和重排流程，不新增业务表，也不要求旧文档全量重建向量。实现、限制与启用方法见 [RAG 可靠性说明](docs/RAG_RELIABILITY.md)。
+
 ## 当前项目边界
 
 项目目前适合本地开发、功能演示和技术方案验证，距离生产环境还需要继续补充：

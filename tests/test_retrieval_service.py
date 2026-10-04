@@ -75,6 +75,9 @@ class FakeRepository(PgVectorRepository):
         self.list_scopes.append(scope)
         return bool(self.chunks)
 
+    def candidate_policies(self, *, scope, document_ids):
+        return {}
+
     def list_chunks(
         self,
         *,

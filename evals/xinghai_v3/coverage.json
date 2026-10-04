@@ -1,0 +1,486 @@
+{
+  "company": "星海科技有限公司",
+  "as_of": "2026-10-04",
+  "annotation_version": "2026-10-04-r2",
+  "semantic_annotations_execution": "manual_review_only_not_executed_by_current_scorer",
+  "corpus_edition": "department-offline-v3-docx-manual-review",
+  "single_turn_cases": 60,
+  "answerable": 53,
+  "unanswerable": 7,
+  "conversation_cases": 8,
+  "conversation_turns": 24,
+  "permission_cases": 12,
+  "covered_documents": 30,
+  "covered_formats": {
+    "docx": 6,
+    "pdf": 12,
+    "md": 8,
+    "txt": 4
+  },
+  "single_turn_scopes": {
+    "人力资源部": 11,
+    "公司公共": 11,
+    "技术部": 13,
+    "平台研发部": 17,
+    "all_accessible": 8
+  },
+  "categories": {
+    "事实查询": 7,
+    "表格条件": 1,
+    "版本冲突": 1,
+    "表格查询": 3,
+    "安全流程": 1,
+    "金额边界": 4,
+    "区间计算": 1,
+    "历史版本": 1,
+    "跨页条款": 1,
+    "长表跨页": 1,
+    "双栏阅读": 1,
+    "OCR扫描件": 1,
+    "状态更新": 1,
+    "时间状态": 1,
+    "版本区分": 1,
+    "错误代码": 1,
+    "FAQ": 1,
+    "Markdown表格": 1,
+    "变更关联": 1,
+    "时间线计算": 1,
+    "技术参数": 1,
+    "跨文档关联": 2,
+    "不可回答": 7,
+    "部门资料事实与边界": 10,
+    "证据边界": 1,
+    "时间计算": 1,
+    "幂等与租户": 1,
+    "权限制度": 1,
+    "记忆边界": 1,
+    "检索降级": 1,
+    "文档与现实区分": 1,
+    "验收条件": 1,
+    "OCR已知缺陷": 1
+  },
+  "structural_validation": "passed",
+  "source_hashes": "passed",
+  "evidence_checks": [
+    {
+      "id": "XH-001",
+      "document": "01_人事考勤与休假管理制度.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-002",
+      "document": "01_人事考勤与休假管理制度.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-003",
+      "document": "02_差旅与费用报销管理制度.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-004",
+      "document": "02_差旅与费用报销管理制度.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-005",
+      "document": "02_差旅与费用报销管理制度.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-006",
+      "document": "03_信息安全与数据分级管理制度.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-007",
+      "document": "03_信息安全与数据分级管理制度.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-008",
+      "document": "04_采购与供应商准入流程手册.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-009",
+      "document": "04_采购与供应商准入流程手册.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-010",
+      "document": "05_客户项目交付与变更管理流程手册.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-011",
+      "document": "05_客户项目交付与变更管理流程手册.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-012",
+      "document": "06_云服务订阅与数据处理合同示范文本.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-013",
+      "document": "06_云服务订阅与数据处理合同示范文本.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-014",
+      "document": "07_公司组织与产品服务说明.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-015",
+      "document": "07_公司组织与产品服务说明.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-016",
+      "document": "08_差旅住宿标准_2025归档版.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-017",
+      "document": "09_客户数据外发审批补充规定.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-018",
+      "document": "10_系统资产复核台账.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-019",
+      "document": "11_生产运维值班与回退手册.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-019",
+      "document": "11_生产运维值班与回退手册.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-020",
+      "document": "12_生产维护通知_扫描件.pdf",
+      "method": "source_scan_ground_truth_not_ocr_accuracy",
+      "found": true
+    },
+    {
+      "id": "XH-021",
+      "document": "13_海岚项目最终验收纪要.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-022",
+      "document": "13_海岚项目最终验收纪要.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-023",
+      "document": "14_协作云版本发布与兼容说明.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-024",
+      "document": "15_开放平台API接入与故障处理技术手册.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-025",
+      "document": "16_员工与客户服务FAQ.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-026",
+      "document": "17_协作云部署与备份技术手册.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-027",
+      "document": "18_海岚项目周报与变更记录.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-028",
+      "document": "19_生产支持工单与故障记录.txt",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-029",
+      "document": "20_九月内部通知与值班安排.txt",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-030",
+      "document": "15_开放平台API接入与故障处理技术手册.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-031",
+      "document": "18_海岚项目周报与变更记录.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-031",
+      "document": "13_海岚项目最终验收纪要.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-21",
+      "document": "21_新员工入职与试用期评估操作手册.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-22",
+      "document": "22_季度绩效评估与复核流程.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-22",
+      "document": "22_季度绩效评估与复核流程.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-23",
+      "document": "23_内部培训与学习费用审批指引.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-24",
+      "document": "24_部门调动与账号权限交接清单.txt",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-25",
+      "document": "25_员工离职交接与访问撤销流程.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-26",
+      "document": "26_项目测试验收与缺陷分级规范.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-27",
+      "document": "27_报表导出重复提交事件复盘.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-27",
+      "document": "27_报表导出重复提交事件复盘.pdf",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-28",
+      "document": "28_知识库检索与多轮问答设计说明.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-28",
+      "document": "28_知识库检索与多轮问答设计说明.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-28",
+      "document": "28_知识库检索与多轮问答设计说明.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-28",
+      "document": "28_知识库检索与多轮问答设计说明.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-29",
+      "document": "29_文档入库验收与知识更新规范.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-29",
+      "document": "29_文档入库验收与知识更新规范.docx",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-30",
+      "document": "30_Webhook投递重试与幂等处理规范.txt",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-D-30",
+      "document": "30_Webhook投递重试与幂等处理规范.txt",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-046",
+      "document": "23_内部培训与学习费用审批指引.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-047",
+      "document": "23_内部培训与学习费用审批指引.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-048",
+      "document": "30_Webhook投递重试与幂等处理规范.txt",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-049",
+      "document": "30_Webhook投递重试与幂等处理规范.txt",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-050",
+      "document": "30_Webhook投递重试与幂等处理规范.txt",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-051",
+      "document": "23_内部培训与学习费用审批指引.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-052",
+      "document": "28_知识库检索与多轮问答设计说明.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-053",
+      "document": "28_知识库检索与多轮问答设计说明.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-054",
+      "document": "28_知识库检索与多轮问答设计说明.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-055",
+      "document": "26_项目测试验收与缺陷分级规范.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-055",
+      "document": "26_项目测试验收与缺陷分级规范.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-056",
+      "document": "16_员工与客户服务FAQ.md",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-056",
+      "document": "30_Webhook投递重试与幂等处理规范.txt",
+      "method": "current_project_splitter_chunk_with_current_file_hash",
+      "found": true
+    },
+    {
+      "id": "XH-E-057",
+      "document": "12_生产维护通知_扫描件.pdf",
+      "method": "source_scan_ground_truth_not_ocr_accuracy",
+      "found": true
+    }
+  ],
+  "conversations_review": "reference/source assignments reviewed; no live model execution",
+  "live_evaluation_executed": false,
+  "external_model_calls": 0,
+  "database_writes": 0,
+  "corpus_document_hashes": {
+    "02_差旅与费用报销管理制度.docx": "e486ad16c2bc642fbc5d0007ef344d68848862adfdbfdd0ee03002919e8d765d",
+    "03_信息安全与数据分级管理制度.pdf": "2cd6dac2eed7c4ad24d01b9ed2092708cd1cfad9c2cb9a709066ef65972b7603",
+    "04_采购与供应商准入流程手册.docx": "d11fff888d382eca9f8040efd09285caa6e89ccd7c551e3fa6a75adf5910c1e0",
+    "07_公司组织与产品服务说明.pdf": "430f5b34c47b5c2c68453b7629a4a4e3fb985d0030bd01e08a789d90b50d2fde",
+    "08_差旅住宿标准_2025归档版.pdf": "5711e19117b1ccbdb63a584a6e5adda38fdd3576f34d66249c8747060ab0b022",
+    "16_员工与客户服务FAQ.md": "445ccec80682b6e7be24c29cafe33b56b333e30465055fa69fa35a7c22dc350f",
+    "01_人事考勤与休假管理制度.docx": "367eb90c20802b4dd8869aae3f5dba3a0588780d76b294545e6252731e9bd2a8",
+    "20_九月内部通知与值班安排.txt": "32ed998ef1375af43a46cb1af6dfb79d122eda22b14ee22d494d52fad31688dc",
+    "21_新员工入职与试用期评估操作手册.docx": "9534e258c6847c9d8ff645a3eedfa137718e5e7d9b735e6b8950e7a89927afc5",
+    "22_季度绩效评估与复核流程.md": "4e71ba8c656d66b77872bf689204d792d72d132b82563c5eb0f73ceb5534d4de",
+    "23_内部培训与学习费用审批指引.md": "0897b08e1d4e4de62280bc2222c98b4a4a44a88f18ca13c3e92623eab810a9c0",
+    "24_部门调动与账号权限交接清单.txt": "bebeaa3065ea47668ffb549b4fbfdd2603aed62cca979706faaada30d8732ea4",
+    "25_员工离职交接与访问撤销流程.pdf": "b747ca1df3733225b42e35342c5990152002abcd24ca1e5fc90f3e628b1691a0",
+    "05_客户项目交付与变更管理流程手册.docx": "56fdb4731e1c17d54b0b3cfba4b9c00f84bf899f0db9de65151cbf58cb8fd710",
+    "06_云服务订阅与数据处理合同示范文本.pdf": "91077f6b09d4c95eed7ab77a1f4d58cdee7bf9aa95c07f2d08e3afaeb2be71f6",
+    "09_客户数据外发审批补充规定.pdf": "132e244c96add34cc695405e9bad973938f5514ac5c1e4b5e56f620582ef39ae",
+    "13_海岚项目最终验收纪要.pdf": "211a4a71949e8dfbbbc742f5f37dcd8d792b120e536b00939428f25aac65614e",
+    "18_海岚项目周报与变更记录.md": "06c1fd4e3abb925ff480e1566b49f1358cc3f4d8299409974c700ed397e24b02",
+    "19_生产支持工单与故障记录.txt": "15e7cbba321b976716f0814ad2962d8a30dd270856d95233682b992a9d0354e1",
+    "26_项目测试验收与缺陷分级规范.md": "f193cba74516016107bbb373e69766f3d503b08bf781dad02b07bdfc3ab7575f",
+    "27_报表导出重复提交事件复盘.pdf": "78e0cac9ec0aa8d80f44911cbfc97c4cfd7b542f2607498e82c9eb398477d574",
+    "10_系统资产复核台账.pdf": "bde883c8387063c8c8db4dec3f9feb4f45aab301eaa7025eb2d3c06793f66e16",
+    "11_生产运维值班与回退手册.pdf": "38653edc0662f1042af32be2061dac354392896931e254ec323f5728d17e1ff4",
+    "12_生产维护通知_扫描件.pdf": "76c053e7d68534aec868a8721a6b6a88ffd4f5660b272f62ebfddd1049916b53",
+    "14_协作云版本发布与兼容说明.pdf": "a20fa30ef3a933a17eed3468ebe95e952efd6e58403e6de0e8fa0449e40d6e2d",
+    "15_开放平台API接入与故障处理技术手册.md": "be2c0ee25efcd90a2e4bfa092c68392a72cb736fe6c738776798aaea2a0a011b",
+    "17_协作云部署与备份技术手册.md": "cf1db79b07bb26ce382f6086aedd8d81fff7f4444b7f64c3567db65963a50a1f",
+    "28_知识库检索与多轮问答设计说明.md": "b7452068ef7f943bc89b0000b25c09400cfcfe623253e4d1b1555854c17e95c1",
+    "29_文档入库验收与知识更新规范.docx": "1b07729ea0ba225e0671d905bb47d2a507aed0c64b9ebe1bf7c3cd99ffe00875",
+    "30_Webhook投递重试与幂等处理规范.txt": "58d3646a2fb7eaf99b289be17d258874a3ee1b50a3499fdd9eccde65da6cf34a"
+  }
+}

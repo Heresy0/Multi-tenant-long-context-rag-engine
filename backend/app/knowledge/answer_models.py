@@ -1,6 +1,20 @@
 from uuid import UUID
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+class CalculationOperand(BaseModel):
+    source: str = Field(description="问题，或引用编号如资料1；输入必须来自该来源")
+    quote: str = Field(min_length=1, max_length=300, description="含输入值和单位的连续原文摘录")
+    value: str = Field(min_length=1, max_length=40, description="数值字符串或HH:MM:SS起始时刻")
+    unit: Literal["时刻", "秒", "分钟", "小时", "元"]
+
+
+class CalculationRequest(BaseModel):
+    operation: Literal["time_add", "money_sum", "money_difference"]
+    inputs: list[CalculationOperand] = Field(min_length=2, max_length=20)
+    result: str = Field(min_length=1, max_length=50, description="模型提出的结果；程序会独立复算，不信任此值")
 
 
 class AnswerClaim(BaseModel):
@@ -20,7 +34,9 @@ class AnswerClaim(BaseModel):
             "编号不能带方括号。"
         ),
     )
-    
+    calculation: CalculationRequest | None = Field(default=None,
+        description="仅用于受限的时间累加或金额求和/差额；直接事实为null。需逐个提供输入来源。")
+
 
 class AnswerDraft(BaseModel):
     answerable: bool

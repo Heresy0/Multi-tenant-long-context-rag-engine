@@ -12,6 +12,7 @@ from ..db.models import (
     KnowledgeDocument,
 )
 from ..security.retrieval_scope import RetrievalScope
+from ..documents.policy_metadata import extract_policy
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +51,10 @@ class PgVectorRepository:
         chunk: DocumentChunk,
         document: KnowledgeDocument,
     ) -> dict[str, object]:
-        metadata = dict(chunk.metadata_json)
+        metadata = dict(chunk.metadata_json or {})
+        stored_policy = (document.metadata_json or {}).get("policy")
+        if isinstance(stored_policy, dict):
+            metadata["policy"] = stored_policy
 
         metadata.update({
             "tenant_id": str(chunk.tenant_id),
@@ -67,6 +71,30 @@ class PgVectorRepository:
         })
 
         return metadata
+
+    def candidate_policies(self, *, scope, document_ids):
+        """Read headers of candidate documents only, with scope/ready guards.
+
+        Read at most the first eight chunks per candidate. Legacy indexes need no
+        embedding rebuild. Extracted policy is request-local;
+        this method never persists metadata or loads the whole knowledge base.
+        """
+        if not document_ids:
+            return {}
+        rows = self._session.execute(select(KnowledgeDocument, DocumentChunk).join(
+            DocumentChunk, and_(KnowledgeDocument.id == DocumentChunk.document_id,
+                KnowledgeDocument.tenant_id == DocumentChunk.tenant_id,
+                KnowledgeDocument.knowledge_base_id == DocumentChunk.knowledge_base_id),
+        ).where(KnowledgeDocument.id.in_(document_ids), KnowledgeDocument.tenant_id == scope.tenant_id,
+                scope.knowledge_base_filter(KnowledgeDocument.knowledge_base_id),
+                KnowledgeDocument.status == "ready", DocumentChunk.chunk_index < 8
+                ).order_by(KnowledgeDocument.id, DocumentChunk.chunk_index)).all()
+        grouped = {}
+        for document, chunk in rows:
+            grouped.setdefault(str(document.id), (document, []))[1].append(chunk.content)
+        return {identifier: {**extract_policy("\n".join(contents), doc.file_name),
+                            **((doc.metadata_json or {}).get("policy") if isinstance((doc.metadata_json or {}).get("policy"), dict) else {})}
+                for identifier, (doc, contents) in grouped.items()}
 
     def search(
         self,

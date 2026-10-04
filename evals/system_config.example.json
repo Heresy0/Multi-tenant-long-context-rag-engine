@@ -1,0 +1,43 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "timeout_seconds": 120,
+  "delay_seconds": 1,
+  "knowledge_bases": {
+    "公司公共": "de5e672c-8619-4e7a-b564-0baec768b86f",
+    "人力资源部": "d1aa1640-7dec-4158-8d8b-b92f800f8544",
+    "技术部": "8e4af664-22c1-480e-9393-36ac401da0f5",
+    "平台研发部": "a3a018f5-f612-43cc-95ce-3457c22ae2e3"
+  },
+  "profiles": {
+    "全范围测试用户": {
+      "token_env": "ENTERPRISE_KB_ACCESS_TOKEN",
+      "expected_groups": ["公司公共", "人力资源部", "技术部", "平台研发部"]
+    },
+    "仅公共测试用户": {
+      "token_env": "EVAL_PUBLIC_ACCESS_TOKEN",
+      "expected_groups": ["公司公共"]
+    },
+    "HR测试用户": {
+      "token_env": "EVAL_HR_ACCESS_TOKEN",
+      "expected_groups": ["公司公共", "人力资源部"]
+    },
+    "技术测试用户": {
+      "token_env": "EVAL_TECH_ACCESS_TOKEN",
+      "expected_groups": ["公司公共", "技术部"]
+    },
+    "研发测试用户": {
+      "token_env": "EVAL_RD_ACCESS_TOKEN",
+      "expected_groups": ["公司公共", "平台研发部"]
+    },
+    "跨库测试用户": {
+      "token_env": "EVAL_CROSS_ACCESS_TOKEN",
+      "expected_groups": ["公司公共", "技术部", "平台研发部"]
+    }
+  },
+  "security_fixtures": {
+    "ACL-02": {"no_equivalent_visible_evidence_verified": false},
+    "ACL-04": {"no_equivalent_visible_evidence_verified": false},
+    "ACL-06": {"no_equivalent_visible_evidence_verified": false},
+    "ACL-09": {"no_equivalent_visible_evidence_verified": false}
+  }
+}

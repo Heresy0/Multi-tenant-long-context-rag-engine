@@ -10,6 +10,7 @@ from langchain_core.documents import Document
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from ..knowledge.keyword_tokenizer import build_keyword_text
+from ..documents.policy_metadata import enrich_chunks
 
 from ..config import Settings
 from ..db.models import (
@@ -176,6 +177,7 @@ class PgVectorIndexingService:
             document.status = "ready"
             document.metadata_json = {
                 **dict(document.metadata_json),
+                "policy": self._document_policy(chunks, document),
                 "chunk_count": len(new_chunks),
                 "chunking_version": CHUNKING_VERSION,
                 "embedding_model": (
@@ -382,6 +384,7 @@ class PgVectorIndexingService:
             document.last_error = None
             document.metadata_json = {
                 **dict(document.metadata_json),
+                "policy": self._document_policy(chunks, document),
                 "chunk_count": len(new_chunks),
                 "chunking_version": CHUNKING_VERSION,
                 "embedding_model": (
@@ -429,6 +432,16 @@ class PgVectorIndexingService:
                 KnowledgeDocument.id == document_id,
             )
         )
+
+    @staticmethod
+    def _document_policy(chunks, document):
+        policy = dict(chunks[0].metadata.get("policy", {}))
+        previous = document.metadata_json.get("policy", {})
+        if isinstance(previous, dict):
+            for key in ("rule_scope", "supersedes"):
+                if key in previous:
+                    policy[key] = previous[key]
+        return policy
 
     def _is_current(
         self,
@@ -612,6 +625,8 @@ class PgVectorIndexingService:
             raise ValueError(
                 f"文档没有可索引的内容：{path}"
             )
+
+        enrich_chunks(chunks, document_name)
 
         for chunk in chunks:
             chunk.metadata["source"] = source

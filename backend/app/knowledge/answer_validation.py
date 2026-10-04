@@ -9,6 +9,8 @@ from decimal import Decimal
 
 from .answer_models import AnswerDraft
 from .context_builder import BuiltContext
+from .calculation_service import CalculationError, compute
+from ..documents.policy_metadata import policy_label
 
 
 FACT_PATTERN = re.compile(
@@ -109,8 +111,19 @@ class AnswerValidator:
                 )
                 continue
 
+            if claim.calculation is not None:
+                try:
+                    calculation = compute(claim, context, question)
+                    if claim.text != calculation.rendered_text:
+                        errors.append(f"第{claim_index}个计算结论不是程序生成的受控表达")
+                except CalculationError as exc:
+                    errors.append(f"第{claim_index}个计算结论校验失败：{exc}")
+                # Only program-rendered calculation prose is exempt from literal
+                # number matching. Direct claims still take the original path.
+                continue
+
             cited_text = "\n".join(
-                item_map[citation_id].content
+                item_map[citation_id].content + "\n" + policy_label(item_map[citation_id].policy)
                 for citation_id in claim.citations
             )
 

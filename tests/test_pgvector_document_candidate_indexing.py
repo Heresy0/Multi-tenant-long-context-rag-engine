@@ -220,7 +220,7 @@ def test_indexes_pending_document_at_version_one_and_is_idempotent(
 ) -> None:
     path, candidate_hash = _write_candidate(
         tmp_path,
-        "异步上传的新文档内容。",
+        "版本: 1.4\n生效日期: 2026年7月1日\n异步上传的新文档内容。",
     )
     final_uri = (
         tmp_path / "documents" / "研发规范.txt"
@@ -277,12 +277,15 @@ def test_indexes_pending_document_at_version_one_and_is_idempotent(
     assert stored is not None
     assert stored.status == "ready"
     assert stored.version == 1
+    assert stored.metadata_json["policy"]["business_version"] == "1.4"
+    assert stored.metadata_json["policy"]["effective_from"] == "2026-07-01"
     assert first_count == len(chunks)
     assert first_count >= 1
     assert second_count == 0
     assert embeddings.document_calls == 1
     assert all(
         chunk.metadata_json["source"] == final_uri
+        and chunk.metadata_json["policy"]["business_version"] == "1.4"
         and chunk.metadata_json["document_name"]
         == "研发规范"
         for chunk in chunks

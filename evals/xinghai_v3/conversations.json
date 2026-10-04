@@ -1,0 +1,594 @@
+[
+  {
+    "id": "XH-MT-01",
+    "turns": [
+      {
+        "question": "海岚项目的用户验收原定什么时候？",
+        "expected_answer": "2026年9月25日。",
+        "id": "XH-MT-01-T1",
+        "required_facts": [
+          "2026年9月25日"
+        ],
+        "required_source_documents": [
+          "18_海岚项目周报与变更记录.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "后来为什么推迟了？",
+        "expected_answer": "CR-026-03新增跨部门审批代理，工作量4人日，影响里程碑。",
+        "id": "XH-MT-01-T2",
+        "required_facts": [
+          "跨部门审批代理"
+        ],
+        "required_source_documents": [
+          "18_海岚项目周报与变更记录.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [
+          "CR-026-03",
+          "4人日"
+        ],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "那最后验收通过了吗？",
+        "expected_answer": "2026年9月29日签署最终验收，遗留一般缺陷DEF-026-08被书面接受。",
+        "id": "XH-MT-01-T3",
+        "required_facts": [
+          "最终验收"
+        ],
+        "required_source_documents": [
+          "13_海岚项目最终验收纪要.pdf"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [
+          "2026年9月29日",
+          "DEF-026-08被书面接受"
+        ],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "肯定已签署最终验收，但不因此推断遗留缺陷已经修复。"
+        ]
+      }
+    ],
+    "sources": [
+      "18_海岚项目周报与变更记录.md",
+      "13_海岚项目最终验收纪要.pdf"
+    ],
+    "as_of": "2026-10-04",
+    "profile": "全范围测试用户",
+    "retrieval_scope": "all_accessible",
+    "reset_conversation_before_case": true,
+    "evaluation_mode": "manual_or_separate_conversation_runner",
+    "annotation_version": "2026-10-04-r2"
+  },
+  {
+    "id": "XH-MT-02",
+    "turns": [
+      {
+        "question": "截至2026-10-04，普通员工去上海住宿每晚最多报多少，依据哪个版本？",
+        "expected_answer": "650元，依据现行版本1.4。",
+        "id": "XH-MT-02-T1",
+        "required_facts": [
+          "650元",
+          "1.4"
+        ],
+        "required_source_documents": [
+          "02_差旅与费用报销管理制度.docx"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "2025年呢？",
+        "expected_answer": "2025年历史版本1.2为550元。",
+        "id": "XH-MT-02-T2",
+        "required_facts": [
+          "550元",
+          "1.2"
+        ],
+        "required_source_documents": [
+          "08_差旅住宿标准_2025归档版.pdf"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "承接上一轮普通员工上海住宿及版本问题，切换为2025年：550元、历史版本1.2。"
+        ]
+      },
+      {
+        "question": "那截至2026-10-04，部门负责人去上海每晚最多报多少？",
+        "expected_answer": "850元。",
+        "id": "XH-MT-02-T3",
+        "required_facts": [
+          "850元"
+        ],
+        "required_source_documents": [
+          "02_差旅与费用报销管理制度.docx"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      }
+    ],
+    "sources": [
+      "02_差旅与费用报销管理制度.docx",
+      "08_差旅住宿标准_2025归档版.pdf"
+    ],
+    "as_of": "2026-10-04",
+    "profile": "全范围测试用户",
+    "retrieval_scope": "all_accessible",
+    "reset_conversation_before_case": true,
+    "evaluation_mode": "manual_or_separate_conversation_runner",
+    "annotation_version": "2026-10-04-r2"
+  },
+  {
+    "id": "XH-MT-03",
+    "turns": [
+      {
+        "question": "9月20日维护会影响什么，维护窗口是什么时候？",
+        "expected_answer": "生产报表导出，窗口02:00至03:00北京时间。",
+        "id": "XH-MT-03-T1",
+        "required_facts": [
+          "报表导出",
+          "02:00",
+          "03:00"
+        ],
+        "required_source_documents": [
+          "12_生产维护通知_扫描件.pdf"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ],
+        "accepted_source_document_sets": [
+          [
+            "12_生产维护通知_扫描件.pdf"
+          ],
+          [
+            "19_生产支持工单与故障记录.txt"
+          ],
+          [
+            "20_九月内部通知与值班安排.txt"
+          ]
+        ]
+      },
+      {
+        "question": "那登录还能用吗？",
+        "expected_answer": "登录、审批和开放API不受此次维护影响。",
+        "id": "XH-MT-03-T2",
+        "required_facts": [
+          "登录",
+          "不受"
+        ],
+        "required_source_documents": [
+          "12_生产维护通知_扫描件.pdf"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ],
+        "accepted_source_document_sets": [
+          [
+            "12_生产维护通知_扫描件.pdf"
+          ],
+          [
+            "19_生产支持工单与故障记录.txt"
+          ],
+          [
+            "20_九月内部通知与值班安排.txt"
+          ]
+        ]
+      },
+      {
+        "question": "之前排队的任务要重提吗？",
+        "expected_answer": "不需要，已有任务保留并在恢复后继续执行。",
+        "id": "XH-MT-03-T3",
+        "required_facts": [
+          "不需要",
+          "保留"
+        ],
+        "required_source_documents": [
+          "12_生产维护通知_扫描件.pdf"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ],
+        "accepted_source_document_sets": [
+          [
+            "12_生产维护通知_扫描件.pdf"
+          ],
+          [
+            "19_生产支持工单与故障记录.txt"
+          ],
+          [
+            "20_九月内部通知与值班安排.txt"
+          ]
+        ]
+      }
+    ],
+    "sources": [
+      "12_生产维护通知_扫描件.pdf",
+      "19_生产支持工单与故障记录.txt",
+      "20_九月内部通知与值班安排.txt"
+    ],
+    "as_of": "2026-10-04",
+    "profile": "全范围测试用户",
+    "retrieval_scope": "all_accessible",
+    "reset_conversation_before_case": true,
+    "evaluation_mode": "manual_or_separate_conversation_runner",
+    "annotation_version": "2026-10-04-r2"
+  },
+  {
+    "id": "XH-D-MT-04",
+    "source_groups": [
+      "人力资源部",
+      "公司公共"
+    ],
+    "sources": [
+      "23_内部培训与学习费用审批指引.md",
+      "02_差旅与费用报销管理制度.docx"
+    ],
+    "turns": [
+      {
+        "question": "2000元的外部课程由谁审批？",
+        "expected_answer": "直属经理批准并由HR登记。",
+        "id": "XH-D-MT-04-T1",
+        "required_facts": [
+          "直属经理",
+          "HR"
+        ],
+        "required_source_documents": [
+          "23_内部培训与学习费用审批指引.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "培训结束后多久提交总结？",
+        "expected_answer": "10个自然日内。",
+        "id": "XH-D-MT-04-T2",
+        "required_facts": [
+          "10个自然日"
+        ],
+        "required_source_documents": [
+          "23_内部培训与学习费用审批指引.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "如果同时有出差费用，回来后多久报销？",
+        "expected_answer": "行程结束或费用发生后10个自然日内，按现行报销制度。",
+        "id": "XH-D-MT-04-T3",
+        "required_facts": [
+          "10个自然日"
+        ],
+        "required_source_documents": [
+          "02_差旅与费用报销管理制度.docx"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      }
+    ],
+    "as_of": "2026-10-04",
+    "profile": "全范围测试用户",
+    "retrieval_scope": "all_accessible",
+    "reset_conversation_before_case": true,
+    "evaluation_mode": "manual_or_separate_conversation_runner",
+    "annotation_version": "2026-10-04-r2"
+  },
+  {
+    "id": "XH-D-MT-05",
+    "source_groups": [
+      "技术部",
+      "平台研发部"
+    ],
+    "sources": [
+      "27_报表导出重复提交事件复盘.pdf",
+      "30_Webhook投递重试与幂等处理规范.txt"
+    ],
+    "turns": [
+      {
+        "question": "INC-2026-1002首次响应耗时多久？",
+        "expected_answer": "13分钟。",
+        "id": "XH-D-MT-05-T1",
+        "required_facts": [
+          "13分钟"
+        ],
+        "required_source_documents": [
+          "27_报表导出重复提交事件复盘.pdf"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "是Webhook的重试问题吗？",
+        "expected_answer": "不是该链路；已确认是客户报表调用重试未复用幂等键。",
+        "id": "XH-D-MT-05-T2",
+        "required_facts": [
+          "不是",
+          "幂等键"
+        ],
+        "required_source_documents": [
+          "27_报表导出重复提交事件复盘.pdf"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "那Webhook默认最多会投递几次？",
+        "expected_answer": "最多6次，含首次投递和5次自动重试。",
+        "id": "XH-D-MT-05-T3",
+        "required_facts": [
+          "6次",
+          "首次"
+        ],
+        "required_source_documents": [
+          "30_Webhook投递重试与幂等处理规范.txt"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      }
+    ],
+    "as_of": "2026-10-04",
+    "profile": "全范围测试用户",
+    "retrieval_scope": "all_accessible",
+    "reset_conversation_before_case": true,
+    "evaluation_mode": "manual_or_separate_conversation_runner",
+    "annotation_version": "2026-10-04-r2"
+  },
+  {
+    "id": "XH-MT-06",
+    "sources": [
+      "23_内部培训与学习费用审批指引.md"
+    ],
+    "turns": [
+      {
+        "question": "2000元的单人单次含税外部课程由谁审批？",
+        "expected_answer": "直属经理批准并由HR登记。",
+        "id": "XH-MT-06-T1",
+        "required_facts": [
+          "直属经理",
+          "HR"
+        ],
+        "required_source_documents": [
+          "23_内部培训与学习费用审批指引.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "恰好8000元呢？",
+        "expected_answer": "第二档，部门负责人及HR负责人批准。",
+        "id": "XH-MT-06-T2",
+        "required_facts": [
+          "部门负责人",
+          "HR负责人"
+        ],
+        "required_source_documents": [
+          "23_内部培训与学习费用审批指引.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "那8001元呢？",
+        "expected_answer": "部门负责人、HR负责人及财务支持组复核，不沿用第二档。",
+        "id": "XH-MT-06-T3",
+        "required_facts": [
+          "部门负责人",
+          "HR负责人",
+          "财务支持组"
+        ],
+        "required_source_documents": [
+          "23_内部培训与学习费用审批指引.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "8001元跨入第三档，部门负责人、HR负责人批准并由财务支持组复核，不能只回答财务支持组。"
+        ]
+      }
+    ],
+    "as_of": "2026-10-04",
+    "profile": "全范围测试用户",
+    "retrieval_scope": "all_accessible",
+    "reset_conversation_before_case": true,
+    "evaluation_mode": "manual_or_separate_conversation_runner",
+    "annotation_version": "2026-10-04-r2"
+  },
+  {
+    "id": "XH-MT-07",
+    "sources": [
+      "30_Webhook投递重试与幂等处理规范.txt"
+    ],
+    "turns": [
+      {
+        "question": "Webhook默认最多投递几次？",
+        "expected_answer": "最多6次，包含首次及追加5次重试。",
+        "id": "XH-MT-07-T1",
+        "required_facts": [
+          "6次",
+          "首次"
+        ],
+        "required_source_documents": [
+          "30_Webhook投递重试与幂等处理规范.txt"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "如果返回401，也这样自动重试吗？",
+        "expected_answer": "不，401属于其他4xx，进入失败待核查，不套用429或5xx重试。",
+        "id": "XH-MT-07-T2",
+        "required_facts": [
+          "不",
+          "失败待核查"
+        ],
+        "required_source_documents": [
+          "30_Webhook投递重试与幂等处理规范.txt"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "401不自动套用429/5xx重试，进入失败待核查；不能仅因包含失败待核查就判通过。"
+        ]
+      },
+      {
+        "question": "那超时就表示业务肯定没执行吗？",
+        "expected_answer": "不能，处理结果待核实；网络超时不等于业务未执行。",
+        "id": "XH-MT-07-T3",
+        "required_facts": [
+          "不能"
+        ],
+        "required_source_documents": [
+          "30_Webhook投递重试与幂等处理规范.txt"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [
+          "待核实"
+        ],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "不能由超时推出业务肯定未执行。"
+        ]
+      }
+    ],
+    "as_of": "2026-10-04",
+    "profile": "全范围测试用户",
+    "retrieval_scope": "all_accessible",
+    "reset_conversation_before_case": true,
+    "evaluation_mode": "manual_or_separate_conversation_runner",
+    "annotation_version": "2026-10-04-r2"
+  },
+  {
+    "id": "XH-MT-08",
+    "sources": [
+      "28_知识库检索与多轮问答设计说明.md"
+    ],
+    "turns": [
+      {
+        "question": "按设计说明，不选择知识库时在哪些库检索？没有可读库时呢？",
+        "expected_answer": "只在当前授权可读库集合内，无可读库拒绝访问，不扩大到全租户。",
+        "id": "XH-MT-08-T1",
+        "required_facts": [
+          "授权",
+          "拒绝"
+        ],
+        "required_source_documents": [
+          "28_知识库检索与多轮问答设计说明.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "之前看过的部门资料，撤权后还能用来回答吗？",
+        "expected_answer": "不能，本轮重新判断权限，可能涉及已撤权范围的历史不展示、不送入模型。",
+        "id": "XH-MT-08-T2",
+        "required_facts": [
+          "不能",
+          "权限"
+        ],
+        "required_source_documents": [
+          "28_知识库检索与多轮问答设计说明.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+        ]
+      },
+      {
+        "question": "那过滤这些历史，会把数据库记录一并删掉吗？",
+        "expected_answer": "不会自动删除，过滤只影响本次读取和模型输入，删除由治理策略决定。",
+        "id": "XH-MT-08-T3",
+        "required_facts": [
+          "不会自动删除"
+        ],
+        "required_source_documents": [
+          "28_知识库检索与多轮问答设计说明.md"
+        ],
+        "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
+        "optional_facts": [],
+        "manual_review_required": true,
+        "semantic_checks": [
+          "过滤历史不等于自动删除数据库记录，接受语义等价否定表达。"
+        ]
+      }
+    ],
+    "as_of": "2026-10-04",
+    "profile": "全范围测试用户",
+    "retrieval_scope": "all_accessible",
+    "reset_conversation_before_case": true,
+    "evaluation_mode": "manual_or_separate_conversation_runner",
+    "annotation_version": "2026-10-04-r2"
+  }
+]

@@ -7,6 +7,7 @@ from langchain_core.retrievers import BaseRetriever
 from pydantic import Field
 
 from .keyword_tokenizer import tokenize_chinese
+from ..evaluation.trace import record_documents
 
 
 def document_key(document: Document) -> str:
@@ -52,9 +53,11 @@ class HybridRetriever(BaseRetriever):
         vector_documents = self.vector_retriever.invoke(
             query
         )
+        record_documents("vector", vector_documents)
         keyword_documents = self.keyword_retriever.invoke(
             query
         )
+        record_documents("keyword", keyword_documents)
 
         scores: dict[str, float] = {}
         documents: dict[str,Document] = {}
@@ -116,6 +119,7 @@ class HybridRetriever(BaseRetriever):
 
             results.append(Document(**kwargs))
 
+        record_documents("fusion", results)
         return results
 
 def create_hybrid_retriever(

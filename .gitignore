@@ -43,3 +43,18 @@ data/load-tests/
 output/pdf/xinghai-tech-corpus/
 output/pdf/星海科技有限公司_知识库测试集.zip
 tmp/xinghai-corpus-qa/
+
+# 可重新生成的星海部门版文档与预览
+output/pdf/xinghai-department-corpus-v2/
+output/pdf/星海科技有限公司_部门知识库30份_v2.zip
+tmp/xinghai-department-corpus-qa-v2/
+
+# DOCX replacement edition with user-owned manual layout review
+output/pdf/xinghai-department-corpus-v3/
+output/pdf/星海科技有限公司_部门知识库30份_v3.zip
+tmp/docx-replacement-render-probe/
+tmp/xinghai-v3-ingestion/
+
+# Evaluation reports and raw traces may contain confidential authorized content.
+evals/reports/system/
+evals/system_config.local.json

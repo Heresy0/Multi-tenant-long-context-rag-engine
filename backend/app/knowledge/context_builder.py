@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from langchain_core.documents import Document
+from ..documents.policy_metadata import policy_label
+from .evidence_quality import evidence_role, prioritize_content
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,8 @@ class ContextItem:
     rerank_score: float | None
     knowledge_base_id: str | None = None
     knowledge_base_name: str | None = None
+    policy: dict | None = None
+    evidence_role: str = "content"
 
 
 @dataclass(frozen=True)
@@ -58,11 +62,13 @@ class ContextBuilder:
     def build(
         self,
         documents: list[Document],
+        *,
+        question: str = "",
     ) -> BuiltContext:
         if not documents:
             return BuiltContext.empty()
 
-        documents = self._deduplicate(documents)
+        documents = prioritize_content(self._deduplicate(documents), question=question)
         items: list[ContextItem] = []
         rendered_blocks: list[str] = []
         source_counts: dict[str, int] = {}
@@ -97,11 +103,15 @@ class ContextBuilder:
             knowledge_base_label = (
                 f"知识库：{metadata['knowledge_base_name']}\n" if metadata.get("knowledge_base_name") else ""
             )
+            policy = metadata.get("policy", {})
+            label = policy_label(policy)
+            policy_header = f"适用性：{label}\n" if label else ""
             prefix = (
                 f"[{citation_id}]\n"
                 f"{knowledge_base_label}"
                 f"文档：{document_name}\n"
                 f"章节：{section_path}\n"
+                f"{policy_header}"
                 "内容："
             )
             separator_size = 2 if rendered_blocks else 0
@@ -159,6 +169,8 @@ class ContextBuilder:
                 ),
                 knowledge_base_id=metadata.get("knowledge_base_id"),
                 knowledge_base_name=metadata.get("knowledge_base_name"),
+                policy=policy,
+                evidence_role=evidence_role(document),
             )
             rendered_block = f"{prefix}{content}"
 
@@ -183,7 +195,7 @@ class ContextBuilder:
         documents: list[Document],
     ) -> list[Document]:
         results: list[Document] = []
-        seen: set[str] = set()
+        seen: set[tuple[str, str]] = set()
 
         for document in documents:
             content = document.page_content.strip()
@@ -191,10 +203,12 @@ class ContextBuilder:
             if not content:
                 continue
 
-            key = str(
+            content_key = str(
                 document.metadata.get("chunk_content_hash")
                 or self._content_hash(content)
             )
+            # Same clauses in distinct business versions are distinct evidence.
+            key = (content_key, policy_label(document.metadata.get("policy")))
 
             if key in seen:
                 continue
