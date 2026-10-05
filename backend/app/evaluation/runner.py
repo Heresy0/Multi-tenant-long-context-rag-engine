@@ -16,7 +16,8 @@ from .trace import capture_trace, record_context
 
 def score_trace(case, trace, *, include_answer=False):
     stages = trace.get("stages", {})
-    metrics = {stage: evidence_metrics(case["expected_evidence"], rows)
+    metrics = {stage: evidence_metrics(case["expected_evidence"], rows,
+                                     alternative_sets=case.get("accepted_evidence_sets", []))
                for stage, rows in stages.items() if stage in ("vector", "keyword", "fusion", "rerank", "context")}
     violations = sum(bool(row.get("scope_violation")) for rows in stages.values() for row in rows)
     if trace.get("error_type"):

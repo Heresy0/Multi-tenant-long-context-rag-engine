@@ -39,6 +39,26 @@ def test_evidence_requires_both_source_and_text_and_scores_rank():
     assert evidence_metrics([], rows())["scored"] is False
 
 
+def test_explicit_fact_aliases_and_numeric_boundaries_do_not_remove_fact_requirements():
+    q = dict(case(), required_facts=['不同', '2次'], fact_alternatives={'不同': ['不相同']})
+    assert score_answer(q, dict(response(), answer='不相同，2次'))['automatic_proxy_pass']
+    assert score_answer(q, dict(response(), answer='不相同，12次'))['missing_facts'] == ['2次']
+    assert '不同' in score_answer(q, dict(response(), answer='相同，2次'))['missing_facts']
+    assert '不同' in score_answer(dict(q, fact_alternatives={}), dict(response(), answer='不相同，2次'))['missing_facts']
+
+
+def test_approved_sources_still_require_complete_sets_and_cited_evidence():
+    q = dict(case(), accepted_source_document_sets=[['正式手册.docx', '附件.txt']],
+             accepted_evidence_sets=[[dict(document='正式手册.docx', text='住宿650元'), dict(document='附件.txt', text='现行')]])
+    evidence = [dict(rows()[0], document_name='正式手册.docx'),
+                dict(rows()[0], citation_id='资料2', document_name='附件.txt', content='现行')]
+    r = dict(response(), citations=[{key: row[key] for key in ('document_name', 'chunk_id', 'citation_id', 'knowledge_base_id')} for row in evidence])
+    assert score_answer(q, r, evidence)['automatic_proxy_pass']
+    assert not score_answer(q, dict(r, citations=r['citations'][:1]), evidence)['automatic_proxy_pass']
+    assert not score_answer(q, r, [dict(row, content='无关') for row in evidence])['automatic_proxy_pass']
+    assert not score_answer(dict(q, accepted_source_document_sets=[['正式手册.docx', '其他.txt'], ['别的.docx', '附件.txt']]), r)['automatic_proxy_pass']
+
+
 def test_multiple_evidence_and_citations_require_all_sources():
     q = case()
     q["expected_evidence"].append(dict(document="附件.pdf", text="现行版本"))
@@ -145,6 +165,20 @@ def test_cli_defaults_safe_and_requires_explicit_live_calls():
     with pytest.raises(SystemExit):
         parse_args(["--limit", "0"])
     assert parse_args(["--mode", "live", "--layers", "index"]).layers == ["index"]
+
+
+def test_targeted_ids_are_offline_by_default_and_filter_before_limit(tmp_path):
+    args = parse_args(['--case-ids', 'XH-016', 'XH-E-060', '--conversation-ids', 'XH-MT-02'])
+    assert args.case_ids == ['XH-016', 'XH-E-060'] and args.mode == 'offline'
+    folder = tmp_path / 'report'
+    assert main(['--mode', 'offline', '--layers', 'answer', '--case-ids', 'XH-016', 'XH-E-060',
+                 '--limit', '1', '--output-dir', str(folder)]) == 0
+    report = json.loads((folder / 'report.json').read_text(encoding='utf-8'))
+    assert report['selected_case_ids'] == ['XH-016']
+    assert report['available_cases'] == 60 and report['selected_cases'] == 1
+    assert report['live_model_calls_enabled'] is False
+    with pytest.raises(ValueError, match='Unknown single-turn'):
+        main(['--layers', 'answer', '--case-ids', 'wrong-id', '--output-dir', str(tmp_path / 'bad')])
 
 
 def config():

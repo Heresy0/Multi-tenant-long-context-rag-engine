@@ -54,6 +54,7 @@ output/pdf/xinghai-department-corpus-v3/
 output/pdf/星海科技有限公司_部门知识库30份_v3.zip
 tmp/docx-replacement-render-probe/
 tmp/xinghai-v3-ingestion/
+tmp/corpus-business-cleanup/
 
 # Evaluation reports and raw traces may contain confidential authorized content.
 evals/reports/system/

@@ -1,0 +1,18 @@
+{
+  "76c053e7d68534aec868a8721a6b6a88ffd4f5660b272f62ebfddd1049916b53": {
+    "reviewed_by": "codex_visual_check",
+    "reviewed_at": "2026-10-05",
+    "source_note": "对照12_生产维护通知_扫描件.pdf第1页完整渲染图，仅核查验证负责人字段。不是整页OCR验收。",
+    "corrections": [
+      {"page": 1, "before": "验证负责人: 周末", "after": "验证负责人: 周宁"}
+    ]
+  },
+  "e404eed3765c243f1d414ea8009ee0a381550e519e9dd7a92b56c77a05d5da0a": {
+    "reviewed_by": "codex_visual_check",
+    "reviewed_at": "2026-10-05",
+    "source_note": "对照清理测试说明后的12_生产维护通知_扫描件.pdf完整第1页渲染图，并检查真实OCR输出。仅核查验证负责人周宁字段；不是整页OCR验收。旧版本核查记录保留。",
+    "corrections": [
+      {"page": 1, "before": "验证负责人: 周末", "after": "验证负责人: 周宁"}
+    ]
+  }
+}

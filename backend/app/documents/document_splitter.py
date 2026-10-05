@@ -14,10 +14,13 @@ from docx.text.paragraph import Paragraph
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from .chunk_quality import annotate_chunks
+
 FAQ_PATTERN = re.compile(r"^Q\d+\s*")
 NUMBERED_HEADING_PATTERN = re.compile(
     r"^(\d+(?:\.\d+)*)\s+\S"
 )
+_RULE_INTRO = re.compile(r"条件|仅当|只有|如果|若|必须|应当|不得|禁止|除外|例外")
 
 
 @dataclass
@@ -68,13 +71,64 @@ def table_rows(table: Table) -> list[str]:
 
     for row in table.rows:
         cells = [
-            "".join(cell.text.split())
+            re.sub(r"\s+", " ", cell.text).strip()
             for cell in row.cells
         ]
         if any(cells):
             rows.append("|".join(cells))
 
     return rows
+
+
+def bind_rule_lists(units: list[ContentUnit]) -> list[ContentUnit]:
+    """Bind an explicit rule introduction to its following same-section list.
+
+    No semantic guessing across headings or tables. Oversized groups still have
+    a common parent and repeat the introduction when split.
+    """
+    results: list[ContentUnit] = []
+    index = 0
+    while index < len(units):
+        unit = units[index]
+        intro = str(unit.content).strip()
+        if unit.kind == "paragraph" and is_rule_introduction(intro):
+            following: list[str] = []
+            cursor = index + 1
+            while (cursor < len(units) and units[cursor].kind == "list"
+                   and units[cursor].section_path == unit.section_path):
+                following.append(str(units[cursor].content))
+                cursor += 1
+            if following:
+                results.append(ContentUnit(
+                    "rule_group", "\n".join([intro, *following]), unit.section_path,
+                    {**unit.metadata, "rule_intro": intro},
+                ))
+                index = cursor
+                continue
+        results.append(unit)
+        index += 1
+    return results
+
+
+def is_rule_introduction(text: str) -> bool:
+    return len(text) <= 200 and text.endswith((":", "：")) and bool(_RULE_INTRO.search(text))
+
+
+def split_rule_text(text: str, splitter: RecursiveCharacterTextSplitter, *,
+                    rule_intro: str = "", max_rule_chars: int = 900) -> list[str]:
+    """Keep short conditional clauses intact; bound expansion to 900 chars."""
+    if len(text) <= max_rule_chars and _RULE_INTRO.search(text):
+        return [text]
+    if rule_intro and text.startswith(rule_intro):
+        # The introduction identifies applicability, not a synthesized summary.
+        body = text[len(rule_intro):].lstrip("\n")
+        body_size = max_rule_chars - len(rule_intro) - 1
+        bounded = RecursiveCharacterTextSplitter(
+            separators=["\n\n", "\n", "。", "；", "，", " ", ""],
+            chunk_size=body_size, chunk_overlap=min(60, body_size - 1),
+        )
+        return [f"{rule_intro}\n{part}" for part in bounded.split_text(body)]
+    return splitter.split_text(text)
 
 
 def split_large_table(
@@ -195,7 +249,9 @@ def collect_units(
             continue
 
         if block.style.name.startswith("List"):
-            text = f"-{text}"
+            flush_paragraphs()
+            units.append(ContentUnit("list", f"-{text}", tuple(headings)))
+            continue
 
         paragraphs.append(text)
 
@@ -259,7 +315,7 @@ def split_content_units(
 
     chunks: list[Document] = []
 
-    for unit_index, unit in enumerate(units):
+    for unit_index, unit in enumerate(bind_rule_lists(units)):
         section_path = " > ".join(unit.section_path)
         section_name = section_path or "文档说明"
 
@@ -279,7 +335,10 @@ def split_content_units(
                 fence=unit.metadata.get("code_fence", "```"),
             )
         else:
-            parts = normal_splitter.split_text(str(unit.content))
+            parts = split_rule_text(
+                str(unit.content), normal_splitter,
+                rule_intro=unit.metadata.get("rule_intro", ""),
+            )
 
         parent_key = f"{section_name}:{unit_index}"
 
@@ -297,12 +356,13 @@ def split_content_units(
                         "chunk_type": unit.kind,
                         "parent_key": parent_key,
                         "chunk_in_parent": part_index,
+                        "parser": unit.metadata.get("parser", "python-docx"),
                         **unit.metadata,
                     },
                 )
             )
 
-    return chunks
+    return annotate_chunks(chunks)
 
 
 def split_code_block(

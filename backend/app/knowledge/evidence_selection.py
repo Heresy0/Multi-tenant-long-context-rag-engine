@@ -1,29 +1,11 @@
 """Applicability selection over already-authorized candidates, never grants access."""
 import re
-from datetime import date
 
 from langchain_core.documents import Document
 
-from ..documents.policy_metadata import DATE, extract_policy, parse_date, policy_label
+from ..documents.policy_metadata import extract_policy, parse_date, policy_label
 from .evidence_quality import evidence_role, prefer_content
-
-
-def query_period(question, today=None):
-    dates = {parse_date(match.group(1)) for match in re.finditer(DATE, question)} - {None}
-    if len(dates) == 1:
-        value = next(iter(dates))
-        return value, value
-    if len(dates) > 1:
-        return None  # Comparison/range intent is not guessed in v1.
-    years = set(re.findall(r"(?<!\d)(\d{4})年", question))
-    if len(years) == 1:
-        year = int(next(iter(years)))
-        if 1 <= year <= 9999:
-            return date(year, 1, 1), date(year, 12, 31)
-    if not years and re.search(r"当前|现在|现行|最新", question):
-        value = today or date.today()
-        return value, value
-    return None
+from .temporal import query_period
 
 
 def select_evidence(question, documents):

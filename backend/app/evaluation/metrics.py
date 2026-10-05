@@ -14,14 +14,30 @@ def document_key(value):
     return re.sub(r"\.(docx|pdf|md|txt)$", "", name, flags=re.I)
 
 
-def evidence_metrics(evidence, rows):
+def contains_fact(text, fact):
+    """Literal proxy with numeric boundaries: 2次 must not match 12次."""
+    needle = normalize(fact)
+    if not needle:
+        return False
+    prefix = r"(?<![\d.])" if needle[0].isdigit() else ""
+    suffix = r"(?![\d.])" if needle[-1].isdigit() else ""
+    return re.search(prefix + re.escape(needle) + suffix, normalize(text)) is not None
+
+
+def evidence_metrics(evidence, rows, *, alternative_sets=()):
+    if alternative_sets:
+        sets = [evidence, *[group for group in alternative_sets if group]]
+        results = [evidence_metrics(group, rows) for group in sets if group]
+        if results:
+            result = max(results, key=lambda value: (value['all_evidence_present'], value['evidence_recall'], value['reciprocal_rank']))
+            return dict(result, matched_evidence_set=results.index(result))
     if not evidence:
         return dict(scored=False, reason="no_positive_evidence_labels")
     matched, first_rank = set(), None
     for rank, row in enumerate(rows, 1):
         for index, item in enumerate(evidence):
             if (document_key(row.get("document_name", "")) == document_key(item["document"])
-                    and normalize(item["text"]) in normalize(row.get("content", ""))):
+                    and contains_fact(row.get("content", ""), item["text"])):
                 matched.add(index)
                 if first_rank is None:
                     first_rank = rank
@@ -38,10 +54,16 @@ def score_answer(case, response, context=None):
     if not isinstance(response.get("answer"), str) or not isinstance(response.get("citations"), list):
         raise ValueError("Response requires answer and citations")
     facts = case.get("required_facts", [])
-    missing = [fact for fact in facts if normalize(fact) not in normalize(response["answer"])]
+    alternatives = case.get("fact_alternatives", {})
+    missing = [fact for fact in facts if not any(contains_fact(response["answer"], option)
+               for option in [fact, *alternatives.get(fact, [])])]
     expected = {document_key(item["document"]) for item in case.get("expected_evidence", [])}
     expected.update(document_key(name) for name in case.get("required_source_documents", []))
     cited = {document_key(item.get("document_name", "")) for item in response["citations"]}
+    source_sets = [expected, *[{document_key(name) for name in group}
+                              for group in case.get("accepted_source_document_sets", []) if group]]
+    # Complete, explicitly annotated alternatives only. Never union partial sets.
+    expected = max(source_sets, key=lambda group: (group.issubset(cited), len(group & cited) / len(group) if group else 0))
     supported = None
     integrity = None
     if context is not None:
@@ -56,7 +78,8 @@ def score_answer(case, response, context=None):
                 integrity = False
             matched_context.extend(candidates)
         if case.get("expected_evidence"):
-            supported = evidence_metrics(case["expected_evidence"], matched_context)["evidence_recall"]
+            supported = evidence_metrics(case["expected_evidence"], matched_context,
+                                         alternative_sets=case.get("accepted_evidence_sets", []))["evidence_recall"]
     answerability_correct = response["answerable"] == case["answerable"]
     if case["answerable"]:
         proxy_pass = (answerability_correct and not missing and expected.issubset(cited)

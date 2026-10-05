@@ -16,7 +16,7 @@ from scripts.evaluate_answers import load_dataset
 CORPUS = ROOT / "output/pdf/xinghai-department-corpus-v3"
 OUTPUT = ROOT / "evals/xinghai_v3"
 AS_OF = "2026-10-04"
-ANNOTATION_VERSION = "2026-10-04-r2"
+ANNOTATION_VERSION = "2026-10-05-r4"
 GROUPS = ["公司公共", "人力资源部", "技术部", "平台研发部"]
 PROFILES = {
     "仅公共测试用户": ["公司公共"],
@@ -210,6 +210,30 @@ def revise_single_annotations(single, names):
         case["manual_review_required"] = True
     for identifier in ("XH-022", "XH-D-26"):
         cases[identifier]["accepted_source_document_sets"] = [[names[13]], [names[26]]]
+    # Explicit, reviewed phrases only; do not globally equate all negations.
+    aliases = {
+        "XH-023": {"不同": ["并未变成/v2", "不相同"]},
+        "XH-D-29": {"不能": ["上传成功不等于可检索"]},
+        "XH-E-048": {"不能": ["网络超时不等于业务未执行", "并不表示业务肯定没执行"]},
+        "XH-E-050": {"不能": ["不应视为同一事件", "不作为同一事件"]},
+        "XH-E-051": {"不自动": ["不会自动获得"]},
+        "XH-E-056": {"不同": ["不相同"]},
+    }
+    for identifier, values in aliases.items():
+        cases[identifier]["fact_alternatives"] = values
+    comparison = cases["XH-E-056"]
+    legacy_api = "06_开放平台API接入与故障处理技术手册.docx"
+    comparison["accepted_source_document_sets"] = [
+        [names[16], names[30]], [names[15], names[30]], [legacy_api, names[30]],
+    ]
+    comparison["accepted_evidence_sets"] = [
+        [dict(document=document, text="最多3次"), comparison["expected_evidence"][1]]
+        for document in (names[15], legacy_api)
+    ]
+    comparison["alternative_source_review"] = {
+        "note": "核对正式API手册的幂等与重试章节；旧06手册位于技术部，必须本轮有权限，不能借标注扩大权限。",
+        "local_source": "sample_docs/fictional_enterprise/" + legacy_api,
+    }
 
 
 def build_conversations(corpus, names):
@@ -280,6 +304,9 @@ def build_conversations(corpus, names):
     sessions[5]["turns"][2]["semantic_checks"] = ["8001元跨入第三档，部门负责人、HR负责人批准并由财务支持组复核，不能只回答财务支持组。"]
     sessions[6]["turns"][1]["semantic_checks"] = ["401不自动套用429/5xx重试，进入失败待核查；不能仅因包含失败待核查就判通过。"]
     sessions[6]["turns"][2].update(optional_facts=["待核实"], semantic_checks=["不能由超时推出业务肯定未执行。"])
+    sessions[6]["turns"][2]["fact_alternatives"] = {
+        "不能": ["并不表示业务肯定没执行", "网络超时不等于业务未执行", "不把网络超时直接当作业务未执行"],
+    }
     sessions[7]["turns"][2]["semantic_checks"] = ["过滤历史不等于自动删除数据库记录，接受语义等价否定表达。"]
     return sessions
 
@@ -340,7 +367,7 @@ GUIDE = """# 星海科技有限公司知识库评估题集
 
 可回答的单轮题每题5分：关键事实2分、限定条件/版本/单位1分、引用来源正确且实际支持答案2分。语义等价表达可以得分，不强制逐字一致。涉及多篇来源的题必须覆盖所有必要来源，不能只命中一篇就视为证据齐全；同库内内容等价的正式来源经人工确认也可接受。
 
-只考题目所问的核心信息及其必要限定：`required_facts`是兼容自动脚本的关键词代理；`optional_facts`是补充说明，未主动提及不扣分，但说错仍应人工核查。`semantic_checks`检查角色与数值对应、计时起点、否定和条件；`forbidden_claims`列出典型错误主张，不是简单禁词（引用后否定错误主张不算错误）。这些新增字段仅供人工审查，现有评分代码不会自动执行。`accepted_source_document_sets`的每个内层列表代表一套可替代的充分来源，仅在本题授权范围内且实际支持答案时人工认可；自动评分仍使用原来的规范来源。
+只考题目所问的核心信息及其必要限定：`required_facts`是兼容自动脚本的关键词代理；`optional_facts`是补充说明，未主动提及不扣分，但说错仍应人工核查。`semantic_checks`检查角色与数值对应、计时起点、否定和条件；`forbidden_claims`列出典型错误主张，不是简单禁词（引用后否定错误主张不算错误）。这两个语义字段仅供人工审查，现有评分代码不会自动执行。统一评分脚本自动支持逐题审核的`fact_alternatives`，并为数字增加边界（2次不匹配12次）。`accepted_source_document_sets`每个内层列表是一套充分来源，须整套满足，不能拼凑不同组合；有上下文时仍核对引用完整性和证据摘录，`accepted_evidence_sets`提供审核过的替代摘录。HTTP多轮仅有引用时仍是来源代理，不代表已验证内容忠实度。别把评分修订后的旧答案回放当作新一轮实测。
 
 例如XH-002只问提前多久，回答5个工作日即可；XH-003只问金额，正确现行金额650元即可，版本号不强制。多轮XH-MT-02明确要求金额和版本，仍测试1.4/1.2的现行、历史冲突。数字包含关系（2次/12次）、关键词堆砌、错误否定、指标对调都不能视为语义通过。
 
@@ -404,7 +431,7 @@ def build(corpus, output, *, refresh=False):
         if "现在" in case["question"] or "当前" in case["question"]:
             case["question"] = f"截至{AS_OF}，" + case["question"]
     scan_case = next(case for case in single if case["id"] == "XH-E-057")
-    scan_case["known_issue"] = "OCR索引将周宁误识别为周末；标准答案仍使用原件真值。"
+    scan_case["known_issue"] = "历史OCR索引曾将周宁误识别为周末；标准答案仍使用原件真值。已增加哈希绑定校对，实际部署须重建索引后验收。"
     single[17]["review_note"] = "历史台账归口标签，不推断当前部门组织或授权。"
     from backend.app.documents.document_splitter import split_docx
     from backend.app.documents.pdf_splitter import split_pdf
@@ -455,13 +482,15 @@ def build(corpus, output, *, refresh=False):
     (output / "README.md").write_text(GUIDE, encoding="utf-8")
     questions = ["# 星海科技有限公司知识库测试题册", "", f"基准日期：{AS_OF}。本册不含标准答案；请勿入库。", "", "## 一、单轮问答（60题）", "",
                  f"标注修订：{ANNOTATION_VERSION}。", "", "每题新建会话；若使用单库模式，按来源范围分组，资料不足题使用全范围已授权身份。", ""]
-    answers = ["# 标准答案与评分参考", "", f"标注修订：{ANNOTATION_VERSION}。", "", "核心事实必答，补充事实不强制；语义等价可以得分。语义检查和可替代来源仅供人工审查，自动脚本不会执行。来源摘录不是模型作答全文。细则见README。请勿入库。", "", "## 一、单轮问答", ""]
+    answers = ["# 标准答案与评分参考", "", f"标注修订：{ANNOTATION_VERSION}。", "", "核心事实必答，补充事实不强制；统一脚本支持已审核的逐题等价表达、充分来源组合与替代摘录。语义正确性仍需人工审查。来源摘录不是模型作答全文。细则见README。请勿入库。", "", "## 一、单轮问答", ""]
     def append_annotations(target, case):
         for key, label in (("optional_facts", "补充事实（不强制）"), ("semantic_checks", "人工语义检查"), ("forbidden_claims", "典型错误主张（不是禁词）")):
             if case.get(key):
                 target.extend([label + "：" + "；".join(case[key]), ""])
         if case.get("accepted_source_document_sets"):
-            target.extend(["人工可接受来源组合：" + " 或 ".join(" + ".join(group) for group in case["accepted_source_document_sets"]), ""])
+            target.extend(["已审核的充分来源组合：" + " 或 ".join(" + ".join(group) for group in case["accepted_source_document_sets"]), ""])
+        if case.get('fact_alternatives'):
+            target.extend(['逐题审核的等价表达：' + json.dumps(case['fact_alternatives'], ensure_ascii=False), ''])
     for case in single:
         label = f"### {case['id']} · {case['category']} · {case['difficulty']}"
         questions.extend([label, "", case["question"], "", f"范围：{case['expected_scope']}。", ""])

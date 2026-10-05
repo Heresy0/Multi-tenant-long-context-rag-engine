@@ -829,6 +829,14 @@ python -m pytest -q
 git diff --check
 ```
 
+## 文档清洗与切片增强
+
+清洗、条件关联、片段用途、OCR 待复核与旧索引兼容说明见 [文档清洗与切片](docs/DOCUMENT_CHUNKING.md)。本地只读检查可使用 `scripts/inspect_document_chunks.py`，不会生成向量或修改数据库。
+
+最新回归优化说明见 [历史追问、答案完整性、OCR校对与评分](docs/RAG_REGRESSION_OPTIMIZATION.md)，包括无需全量重新入库的边界，以及按题号/会话组定向复测方法。
+
+合成语料声明与业务正文的分离原则、备份和更新校验说明见 [业务语料来源治理](docs/CORPUS_PROVENANCE.md)。该操作只处理星海测试文档，不会在通用解析器中删除法律或测试相关词语。
+
 ## License
 
 当前仓库尚未声明开源许可证。如需公开复用或接受外部贡献，请先增加明确的 `LICENSE` 文件。

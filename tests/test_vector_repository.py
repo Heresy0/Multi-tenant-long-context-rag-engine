@@ -25,6 +25,18 @@ def _valid_embedding() -> list[float]:
     )
 
 
+def test_companion_read_is_bounded_by_scope_ready_candidate_ids_and_chunk_count():
+    repository, session = _repository()
+    scope, doc_id = RetrievalScope(tenant_id=uuid4(), knowledge_base_id=uuid4()), uuid4()
+    assert repository.candidate_companions(scope=scope, document_ids=[doc_id]) == []
+    sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect(), compile_kwargs={'literal_binds': True}))
+    for expected in (str(scope.tenant_id), str(scope.knowledge_base_id), str(doc_id), "documents.status = 'ready'", 'chunk_index < 8', 'LIMIT 16'):
+        assert expected in sql
+    assert sql.index('WHERE') < sql.index('LIMIT')
+    with pytest.raises(ValueError):
+        repository.candidate_companions(scope=scope, document_ids=[uuid4(), uuid4(), uuid4()])
+
+
 @pytest.mark.parametrize("ids", [(), (uuid4(), uuid4())])
 def test_multi_scope_filters_before_limit_and_empty_scope_is_never_unrestricted(ids):
     repository, session = _repository()

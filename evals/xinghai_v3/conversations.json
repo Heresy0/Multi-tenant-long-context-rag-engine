@@ -69,7 +69,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-04-r2"
+    "annotation_version": "2026-10-05-r4"
   },
   {
     "id": "XH-MT-02",
@@ -137,7 +137,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-04-r2"
+    "annotation_version": "2026-10-05-r4"
   },
   {
     "id": "XH-MT-03",
@@ -241,7 +241,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-04-r2"
+    "annotation_version": "2026-10-05-r4"
   },
   {
     "id": "XH-D-MT-04",
@@ -312,7 +312,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-04-r2"
+    "annotation_version": "2026-10-05-r4"
   },
   {
     "id": "XH-D-MT-05",
@@ -384,7 +384,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-04-r2"
+    "annotation_version": "2026-10-05-r4"
   },
   {
     "id": "XH-MT-06",
@@ -453,7 +453,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-04-r2"
+    "annotation_version": "2026-10-05-r4"
   },
   {
     "id": "XH-MT-07",
@@ -514,7 +514,14 @@
         "manual_review_required": true,
         "semantic_checks": [
           "不能由超时推出业务肯定未执行。"
-        ]
+        ],
+        "fact_alternatives": {
+          "不能": [
+            "并不表示业务肯定没执行",
+            "网络超时不等于业务未执行",
+            "不把网络超时直接当作业务未执行"
+          ]
+        }
       }
     ],
     "as_of": "2026-10-04",
@@ -522,7 +529,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-04-r2"
+    "annotation_version": "2026-10-05-r4"
   },
   {
     "id": "XH-MT-08",
@@ -589,6 +596,6 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-04-r2"
+    "annotation_version": "2026-10-05-r4"
   }
 ]

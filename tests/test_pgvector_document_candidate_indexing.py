@@ -213,6 +213,28 @@ def _write_candidate(
     return path, sha256(data).hexdigest()
 
 
+def test_review_revision_change_reindexes_same_file_and_version_once(session, scenario, tmp_path, monkeypatch):
+    from backend.app.indexing import pgvector_indexing_service as module
+    path, digest = _write_candidate(tmp_path, '经过核查的示例内容。')
+    uri = path.resolve().as_uri()
+    document = _add_document(session, scenario, file_name='review.txt', storage_uri=uri,
+                             content_hash=digest, status='pending', version=1, marker='r')
+    session.commit()
+    embeddings = FakeEmbeddings()
+    service = PgVectorIndexingService(session=session, settings=_settings(), embeddings=embeddings)
+    args = dict(file_path=path, scope=scenario.technology_scope, document_id=document.id,
+                created_by_user_id=scenario.user_id, target_version=1, candidate_file_name='review.txt',
+                candidate_mime_type='text/plain', candidate_content_hash=digest, final_storage_uri=uri)
+    assert service.index_document_candidate(**args) > 0
+    monkeypatch.setattr(module, 'review_revision', lambda _: 'review-r2')
+    assert service.index_document_candidate(**args) > 0
+    assert service.index_document_candidate(**args) == 0
+    assert embeddings.document_calls == 2
+    session.refresh(document)
+    assert document.version == 1 and document.content_hash == digest
+    assert document.metadata_json['ocr_review_revision'] == 'review-r2'
+
+
 def test_indexes_pending_document_at_version_one_and_is_idempotent(
     session: Session,
     scenario: Scenario,
@@ -279,12 +301,15 @@ def test_indexes_pending_document_at_version_one_and_is_idempotent(
     assert stored.version == 1
     assert stored.metadata_json["policy"]["business_version"] == "1.4"
     assert stored.metadata_json["policy"]["effective_from"] == "2026-07-01"
+    assert stored.metadata_json["quality"]["review_required"] is False
     assert first_count == len(chunks)
     assert first_count >= 1
     assert second_count == 0
     assert embeddings.document_calls == 1
     assert all(
         chunk.metadata_json["source"] == final_uri
+        and chunk.metadata_json["cleaning_version"] == "conservative-v1"
+        and chunk.metadata_json["quality"]["review_required"] is False
         and chunk.metadata_json["policy"]["business_version"] == "1.4"
         and chunk.metadata_json["document_name"]
         == "研发规范"

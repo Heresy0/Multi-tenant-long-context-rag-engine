@@ -28,6 +28,8 @@ def parse_args(argv=None):
     parser.add_argument("--performance-report", type=Path)
     parser.add_argument("--baseline-report", type=Path, help="Compare a like-for-like previous system report")
     parser.add_argument("--limit", type=int, help="Limit each case collection, not total model calls")
+    parser.add_argument("--case-ids", nargs='+', help="Only these single-turn IDs; applied before --limit")
+    parser.add_argument("--conversation-ids", nargs='+', help="Only these conversation group IDs; applied before --limit")
     parser.add_argument("--ocr", action="store_true", help="Run real local OCR if runtime is available")
     parser.add_argument("--allow-model-calls", action="store_true")
     parser.add_argument("--allow-conversation-writes", action="store_true")
@@ -55,10 +57,16 @@ def main(argv=None):
         raise ValueError("Choose a new output directory; previous reports are not overwritten")
     cases = load_dataset(args.dataset_dir / "single_turn.jsonl")
     full_case_count = len(cases)
+    if args.case_ids:
+        unknown = set(args.case_ids) - {case['id'] for case in cases}
+        if unknown:
+            raise ValueError('Unknown single-turn IDs: ' + ','.join(sorted(unknown)))
+        cases = [case for case in cases if case['id'] in args.case_ids]
     if args.limit:
         cases = cases[:args.limit]
     report = dict(schema_version=1, mode=args.mode, selected_cases=len(cases), available_cases=full_case_count,
                   selected_case_ids=[case["id"] for case in cases],
+                  requested_conversation_ids=args.conversation_ids,
                   corpus_manifest_sha256=hashlib.sha256((args.corpus / "manifest.json").read_bytes()).hexdigest()
                       if (args.corpus / "manifest.json").is_file() else None,
                   scope_config_sha256=None,
@@ -107,6 +115,11 @@ def main(argv=None):
         if "conversations" in args.layers:
             if args.allow_conversation_writes:
                 sessions = json.loads((args.dataset_dir / "conversations.json").read_text(encoding="utf-8"))
+                if args.conversation_ids:
+                    unknown = set(args.conversation_ids) - {row['id'] for row in sessions}
+                    if unknown:
+                        raise ValueError('Unknown conversation group IDs: ' + ','.join(sorted(unknown)))
+                    sessions = [row for row in sessions if row['id'] in args.conversation_ids]
                 run_layer("conversations", lambda: evaluate_conversations(sessions[:args.limit] if args.limit else sessions, config))
             else:
                 report["layers"]["conversations"] = skipped("requires_allow_conversation_writes")

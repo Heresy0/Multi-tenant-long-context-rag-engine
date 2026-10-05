@@ -1,5 +1,5 @@
 {
-  "annotation_version": "2026-10-04-r2",
+  "annotation_version": "2026-10-05-r4",
   "purpose": "独立权限回归定义，不创建用户、不修改授权、不代表测试已执行。",
   "profiles": {
     "仅公共测试用户": [
@@ -42,7 +42,7 @@
       ],
       "retrieval_scope": "all_accessible",
       "evaluation_mode": "isolated_fixture_manual_or_security_runner",
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -58,7 +58,7 @@
       ],
       "retrieval_scope": "all_accessible",
       "evaluation_mode": "isolated_fixture_manual_or_security_runner",
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -74,7 +74,7 @@
       ],
       "retrieval_scope": "all_accessible",
       "evaluation_mode": "isolated_fixture_manual_or_security_runner",
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -90,7 +90,7 @@
       ],
       "retrieval_scope": "all_accessible",
       "evaluation_mode": "isolated_fixture_manual_or_security_runner",
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -106,7 +106,7 @@
       ],
       "retrieval_scope": "all_accessible",
       "evaluation_mode": "isolated_fixture_manual_or_security_runner",
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -122,7 +122,7 @@
       ],
       "retrieval_scope": "all_accessible",
       "evaluation_mode": "isolated_fixture_manual_or_security_runner",
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -139,7 +139,7 @@
       ],
       "retrieval_scope": "all_accessible",
       "evaluation_mode": "isolated_fixture_manual_or_security_runner",
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -161,7 +161,7 @@
         "再由获准管理员在测试环境撤销技术库直接授权、部门授权等全部有效读取路径。",
         "刷新权限后读取旧会话并提出本题；不得在真实业务账号上随意撤权。"
       ],
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -176,7 +176,7 @@
         "平台研发部"
       ],
       "retrieval_scope": "all_accessible",
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -191,7 +191,7 @@
       "preconditions": [
         "隔离环境中由两个不同用户各自创建会话，使用非拥有者身份请求。"
       ],
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -206,7 +206,7 @@
       "preconditions": [
         "必须使用属于其他租户的有效测试库编号，而不是随机不存在的编号。"
       ],
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"
@@ -221,7 +221,7 @@
         "隔离环境中使用没有任何可读库的身份；公共库通常对活跃员工可见，须核实测试身份的实际有效授权确实为空。"
       ],
       "retrieval_scope": "all_accessible",
-      "annotation_version": "2026-10-04-r2",
+      "annotation_version": "2026-10-05-r4",
       "manual_review_required": true,
       "semantic_checks": [
         "先核实测试身份的实际有效权限；越权内容、标题、片段、引用或他人会话泄漏均失败，不能仅检查几个禁词。"

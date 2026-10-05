@@ -17,6 +17,7 @@ from .rerank_retriever import RerankRetriever
 from ..security.retrieval_scope import RetrievalScope
 from .vector_repository import PgVectorRepository
 from .evidence_selection import select_evidence
+from .evidence_expansion import expand_incident_candidates
 from uuid import UUID
 from ..evaluation.trace import record_documents, record_scope
 
@@ -91,6 +92,8 @@ class RetrievalService:
         def prepare_candidates(question, candidates):
             candidates = [doc for doc in candidates if scope.contains(
                 doc.metadata.get("tenant_id"), doc.metadata.get("knowledge_base_id"))]
+            candidates = expand_incident_candidates(question, candidates, repository=repository, scope=scope, budget=FETCH_K)
+            record_documents("expanded_candidates", candidates)
             ids = set()
             for doc in candidates:
                 try:

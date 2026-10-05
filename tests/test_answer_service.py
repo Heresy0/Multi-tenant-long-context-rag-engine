@@ -30,6 +30,27 @@ TEST_SCOPE = RetrievalScope(
 TEST_SESSION = object()
 
 
+def test_unsupported_future_certainty_refuses_before_paid_generation(monkeypatch):
+    document = make_document('现行上海住宿限额650元。')
+    document.metadata['policy'] = {'effective_from': '2026-07-01', 'review_date': '2027-06-30'}
+    service, _, llm, _, _ = build_service(monkeypatch, model_result=None, documents=[document])
+    result = answer(service, '2099年10月公司已经确定的限额是多少？')
+    assert not result.answerable and not result.citations
+    assert not llm.calls
+    assert '未来期间' in result.refusal_reason
+
+
+def test_table_completion_passes_existing_citation_validation(monkeypatch):
+    table = '级别|定义|验收处理\nD3一般|存在可接受替代方案，不阻断核心流程|客户书面接受并明确修复日期后可验收'
+    service, *_ = build_service(monkeypatch, documents=[make_document(table)], model_result=AnswerDraft(
+        answerable=True, claims=[AnswerClaim(text='D3客户书面接受后可验收', citations=['资料1'])]))
+    result = answer(service, 'D3验收需要哪些条件？')
+    assert result.answerable
+    assert '不阻断核心流程' in result.answer
+    assert '明确修复日期' in result.answer
+    assert len(result.citations) == 1
+
+
 class FakeRetrievalService:
     def __init__(
         self,

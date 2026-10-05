@@ -24,6 +24,9 @@ class ContextItem:
     knowledge_base_name: str | None = None
     policy: dict | None = None
     evidence_role: str = "content"
+    quality: dict | None = None
+    parser: str | None = None
+    cleaning_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -171,6 +174,9 @@ class ContextBuilder:
                 knowledge_base_name=metadata.get("knowledge_base_name"),
                 policy=policy,
                 evidence_role=evidence_role(document),
+                quality=metadata.get("quality"),
+                parser=metadata.get("parser"),
+                cleaning_version=metadata.get("cleaning_version"),
             )
             rendered_block = f"{prefix}{content}"
 

@@ -19,7 +19,7 @@ from ..documents.pdf_splitter import split_pdf
 from ..documents.text_splitter import split_markdown, split_txt
 
 
-CHUNKING_VERSION = "structured-v3"
+CHUNKING_VERSION = "structured-v4"
 
 
 def split_file(

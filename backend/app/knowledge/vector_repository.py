@@ -96,6 +96,27 @@ class PgVectorRepository:
                             **((doc.metadata_json or {}).get("policy") if isinstance((doc.metadata_json or {}).get("policy"), dict) else {})}
                 for identifier, (doc, contents) in grouped.items()}
 
+    def candidate_companions(self, *, scope, document_ids):
+        """First eight chunks of at most two already matched documents, scoped."""
+        ids = list(document_ids)
+        if not ids:
+            return []
+        if len(ids) > 2:
+            raise ValueError("正文补取最多允许两份候选文档")
+        rows = self._session.execute(select(DocumentChunk, KnowledgeDocument).join(
+            KnowledgeDocument, and_(KnowledgeDocument.id == DocumentChunk.document_id,
+                KnowledgeDocument.tenant_id == DocumentChunk.tenant_id,
+                KnowledgeDocument.knowledge_base_id == DocumentChunk.knowledge_base_id),
+        ).where(DocumentChunk.document_id.in_(ids), DocumentChunk.tenant_id == scope.tenant_id,
+                scope.knowledge_base_filter(DocumentChunk.knowledge_base_id), KnowledgeDocument.status == 'ready',
+                DocumentChunk.chunk_index >= 0, DocumentChunk.chunk_index < 8,
+        ).order_by(KnowledgeDocument.id, DocumentChunk.chunk_index).limit(16)).all()
+        return [StoredChunk(chunk_id=chunk.id, document_id=document.id, tenant_id=chunk.tenant_id,
+                            knowledge_base_id=chunk.knowledge_base_id, content=chunk.content,
+                            document_name=document.file_name, source=document.storage_uri,
+                            metadata=self._build_metadata(chunk=chunk, document=document))
+                for chunk, document in rows]
+
     def search(
         self,
         *,

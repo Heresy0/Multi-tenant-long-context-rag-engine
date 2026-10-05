@@ -21,6 +21,8 @@ from .context_builder import (
     ContextBuilder,
 )
 from .prompts import ANSWER_SYSTEM_PROMPT
+from .answer_constraints import complete_cited_table_conditions, generation_constraints
+from .temporal import future_certainty_gap
 from .retrieval_service import RetrievalService
 from ..security.retrieval_scope import RetrievalScope
 from ..evaluation.trace import record_context, record_documents, record_scope, record_calculations
@@ -130,10 +132,12 @@ class AnswerService:
             context_started
         )
 
-        if not context.items:
+        future_gap = bool(context.items) and future_certainty_gap(question, context.items)
+        if not context.items or future_gap:
             render_started = time.perf_counter()
             result = self._refusal(
-                "没有检索到相关知识库资料。"
+                "缺少已确定覆盖该未来期间的正式制度，不能把现行规则说成未来承诺。"
+                if future_gap else "没有检索到相关知识库资料。"
             )
             timings["render_ms"] = _elapsed_ms(
                 render_started
@@ -154,6 +158,7 @@ class AnswerService:
         )
 
         validation_started = time.perf_counter()
+        complete_cited_table_conditions(question, draft, context)
         calculation_records = []
         for claim in draft.claims:
             if claim.calculation is None:
@@ -164,7 +169,8 @@ class AnswerService:
                 calculation_records.append(dict(operation=claim.calculation.operation, status="verified",
                                                 result=calculation.result, inputs=list(calculation.inputs)))
             except CalculationError as exc:
-                calculation_records.append(dict(operation=claim.calculation.operation, status="rejected", reason=str(exc)))
+                calculation_records.append(dict(operation=claim.calculation.operation, status="rejected", reason=str(exc),
+                                                proposed=claim.calculation.model_dump()))
         record_calculations(calculation_records)
         validation = self._validator.validate(
             draft=draft,
@@ -269,6 +275,7 @@ class AnswerService:
             HumanMessage(
                 content=(
                     f"用户问题：\n{question}\n\n"
+                    f"作答检查：\n{generation_constraints(question)}\n\n"
                     f"知识库资料：\n{context.text}"
                 )
             ),

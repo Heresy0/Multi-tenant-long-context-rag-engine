@@ -271,11 +271,57 @@ def test_indexes_file_and_skips_unchanged_file(
 
     assert document is not None
     assert document.status == "ready"
+    assert document.metadata_json["quality"]["review_required"] is False
+    assert all(chunk.metadata_json["cleaning_version"] == "conservative-v1"
+               and chunk.metadata_json["evidence_role"] in {"content", "front_matter"}
+               for chunk in session.scalars(select(DocumentChunk)))
     assert document.file_size_bytes == file_path.stat().st_size
     assert (
         document.metadata_json["chunk_count"]
         == first_count
     )
+
+
+def test_ocr_quality_is_persisted_without_guessing_correct_name(session, scope_data, tmp_path, monkeypatch):
+    from langchain_core.documents import Document
+    from backend.app.documents.chunk_quality import annotate_chunks
+    path = tmp_path / "扫描件.pdf"
+    path.write_bytes(b"fake PDF; parsing is isolated by the test")
+    parsed = annotate_chunks([Document(page_content="验证负责人：周末", metadata={
+        "source": str(path), "parser": "ocr", "page_start": 1, "page_end": 1,
+        "chunk_type": "paragraph", "parent_key": "page:1", "chunk_in_parent": 0,
+    })])
+    monkeypatch.setattr("backend.app.indexing.pgvector_indexing_service.split_file", lambda *_args, **_kwargs: parsed)
+    scope = RetrievalScope(scope_data.tenant_id, knowledge_base_id=scope_data.technology_kb_id)
+    service = PgVectorIndexingService(session=session, settings=_settings(), embeddings=FakeEmbeddings())
+    service.index_file(file_path=path, scope=scope, created_by_user_id=scope_data.user_id)
+    document = session.scalar(select(KnowledgeDocument))
+    chunk = session.scalar(select(DocumentChunk))
+    assert document.status == "ready"  # Review is a warning, not a new indexing status.
+    assert document.metadata_json["quality"]["review_required"] is True
+    assert document.metadata_json["quality"]["ocr_chunks"] == 1
+    assert chunk.metadata_json["quality"]["review_reasons"] == ["ocr_unverified"]
+    assert "周末" in chunk.content
+
+
+def test_old_chunking_version_is_rebuilt_only_on_explicit_indexing(session, scope_data, tmp_path):
+    from backend.app.knowledge.rag import CHUNKING_VERSION
+    path = tmp_path / "规则.txt"
+    path.write_text("401不得自动重试。", encoding="utf-8")
+    scope = RetrievalScope(scope_data.tenant_id, knowledge_base_id=scope_data.technology_kb_id)
+    embeddings = FakeEmbeddings()
+    service = PgVectorIndexingService(session=session, settings=_settings(), embeddings=embeddings)
+    service.index_file(file_path=path, scope=scope, created_by_user_id=scope_data.user_id)
+    document = session.scalar(select(KnowledgeDocument))
+    document.metadata_json = {**document.metadata_json, "chunking_version": "structured-v3"}
+    session.commit()
+    session.expunge_all()
+    assert service.index_file(file_path=path, scope=scope, created_by_user_id=scope_data.user_id) > 0
+    assert embeddings.document_calls == 2
+    document = session.scalar(select(KnowledgeDocument))
+    assert document.metadata_json["chunking_version"] == CHUNKING_VERSION == "structured-v4"
+    assert service.index_file(file_path=path, scope=scope, created_by_user_id=scope_data.user_id) == 0
+    assert embeddings.document_calls == 2
 
 
 def test_same_file_in_two_knowledge_bases_has_distinct_chunks(

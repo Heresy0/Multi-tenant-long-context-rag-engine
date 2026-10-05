@@ -11,6 +11,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from ..knowledge.keyword_tokenizer import build_keyword_text
 from ..documents.policy_metadata import enrich_chunks
+from ..documents.chunk_quality import summarize_quality
+from ..documents.ocr_review import review_revision
 
 from ..config import Settings
 from ..db.models import (
@@ -178,6 +180,8 @@ class PgVectorIndexingService:
             document.metadata_json = {
                 **dict(document.metadata_json),
                 "policy": self._document_policy(chunks, document),
+                "quality": summarize_quality(chunks),
+                "ocr_review_revision": review_revision(file_hash),
                 "chunk_count": len(new_chunks),
                 "chunking_version": CHUNKING_VERSION,
                 "embedding_model": (
@@ -385,6 +389,8 @@ class PgVectorIndexingService:
             document.metadata_json = {
                 **dict(document.metadata_json),
                 "policy": self._document_policy(chunks, document),
+                "quality": summarize_quality(chunks),
+                "ocr_review_revision": review_revision(candidate_content_hash),
                 "chunk_count": len(new_chunks),
                 "chunking_version": CHUNKING_VERSION,
                 "embedding_model": (
@@ -467,6 +473,7 @@ class PgVectorIndexingService:
         if (
             metadata.get("chunking_version")
             != CHUNKING_VERSION
+            or metadata.get("ocr_review_revision") != review_revision(file_hash)
             or metadata.get("embedding_model")
             != self._settings.embedding_model
         ):
@@ -528,6 +535,7 @@ class PgVectorIndexingService:
         if (
             metadata.get("chunking_version")
             != CHUNKING_VERSION
+            or metadata.get("ocr_review_revision") != review_revision(candidate_content_hash)
             or metadata.get("embedding_model")
             != self._settings.embedding_model
         ):

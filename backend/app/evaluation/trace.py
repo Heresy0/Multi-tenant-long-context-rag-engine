@@ -62,6 +62,10 @@ def record_documents(stage, documents):
                          policy=metadata.get("policy"),
                          policy_selection=metadata.get("policy_selection"),
                          evidence_role=metadata.get("evidence_role"),
+                         quality=metadata.get("quality"),
+                         cleaning_version=metadata.get("cleaning_version"),
+                         chunk_type=metadata.get("chunk_type"),
+                         parser=metadata.get("parser"),
                          section_path=metadata.get("section_path")))
     trace.stages[stage] = rows
 
@@ -79,6 +83,9 @@ def record_context(context):
                              chunk_id=item.chunk_id, citation_id=item.citation_id,
                              policy=item.policy,
                              evidence_role=item.evidence_role,
+                             quality=item.quality,
+                             parser=item.parser,
+                             cleaning_version=item.cleaning_version,
                              knowledge_base_id=str(item.knowledge_base_id)))
     trace.stages["context"] = rows
 
@@ -87,4 +94,3 @@ def record_calculations(records):
     trace = _current.get()
     if trace is not None:
         trace.stages["calculations"] = deepcopy(records)
-

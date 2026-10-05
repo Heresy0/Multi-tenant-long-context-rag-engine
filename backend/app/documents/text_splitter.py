@@ -51,12 +51,20 @@ def split_txt(
             flush()
             kind = "faq"
             lines.append(line)
+        elif _LIST.match(raw_line) and kind != "faq":
+            flush()
+            kind = "list"
+            lines.append(line)
         elif not line:
-            if kind == "paragraph":
+            if kind in {"paragraph", "list"}:
                 flush()
+                kind = "paragraph"
             elif lines and lines[-1]:
                 lines.append("")
         else:
+            if kind == "list" and not raw_line.startswith((" ", "\t")):
+                flush()
+                kind = "paragraph"
             lines.append(line)
     flush()
     if not units and headings:
