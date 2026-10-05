@@ -6,7 +6,7 @@ never used to exempt arbitrary surrounding prose from numeric validation.
 import re
 import unicodedata
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from .answer_models import AnswerClaim
 
@@ -20,6 +20,7 @@ class CalculationResult:
     rendered_text: str
     result: str
     inputs: tuple[str, ...]
+    model_result_matches: bool | None = None
 
 
 def normalized(text):
@@ -119,8 +120,7 @@ def compute(claim: AnswerClaim, context, question):
         result = f"{remaining // 3600:02d}:{remaining % 3600 // 60:02d}:{remaining % 60:02d}"
         if days:
             result = f"第{days + 1}日{result}"
-        if normalized(request.result) != result:
-            raise CalculationError("模型计算结果与程序复算不一致")
+        matches = normalized(request.result) == result if request.result is not None else None
         text = f"按所引用的时长计算：{' + '.join(labels)} = {result}。"
     else:
         if (request.operation == "money_sum" and not re.search(r"合计|总额|总计|一共|求和|相加", question)
@@ -133,11 +133,9 @@ def compute(claim: AnswerClaim, context, question):
         value = sum(values) if request.operation == "money_sum" else values[0] - values[1]
         result = format(value.normalize(), "f")
         try:
-            correct = decimal_value(request.result) == value
-        except (InvalidOperation, CalculationError):
-            correct = False
-        if not correct:
-            raise CalculationError("模型计算结果与程序复算不一致")
+            matches = decimal_value(request.result) == value if request.result is not None else None
+        except CalculationError:
+            matches = False
         sign = " + " if request.operation == "money_sum" else " - "
         text = f"按所引用金额计算：{sign.join(labels)} = {result}元。"
-    return CalculationResult(text, result, tuple(labels))
+    return CalculationResult(text, result, tuple(labels), matches)

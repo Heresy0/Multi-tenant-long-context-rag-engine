@@ -1,5 +1,6 @@
 import hashlib
 import json
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from uuid import uuid4
@@ -45,6 +46,22 @@ def test_explicit_fact_aliases_and_numeric_boundaries_do_not_remove_fact_require
     assert score_answer(q, dict(response(), answer='不相同，12次'))['missing_facts'] == ['2次']
     assert '不同' in score_answer(q, dict(response(), answer='相同，2次'))['missing_facts']
     assert '不同' in score_answer(dict(q, fact_alternatives={}), dict(response(), answer='不相同，2次'))['missing_facts']
+
+
+def test_r5_conversation_annotations_match_question_scope_without_weakening_root_cause():
+    dataset = Path(__file__).resolve().parents[1] / 'evals/xinghai_v3/conversations.json'
+    sessions = {session['id']: session for session in json.loads(dataset.read_text(encoding='utf-8'))}
+    queued = sessions['XH-MT-03']['turns'][2]
+    assert queued['question'] == '之前排队的任务要重提吗？'
+    assert queued['required_facts'] == ['不需要'] and queued['optional_facts']
+    response = dict(answer='不需要重新提交。', answerable=True,
+                    citations=[dict(document_name=queued['required_source_documents'][0])])
+    assert score_answer(dict(queued, answerable=True, expected_evidence=[]), response)['automatic_proxy_pass']
+    assert not score_answer(dict(queued, answerable=True, expected_evidence=[]), dict(response, answer='需要重新提交。'))['automatic_proxy_pass']
+    root = sessions['XH-D-MT-05']['turns'][1]
+    assert '实际根因' in root['question'] and '幂等键' in root['required_facts']
+    response['answer'] = '不是Webhook重试问题，而是报表重复提交。'
+    assert not score_answer(dict(root, answerable=True, expected_evidence=[]), response)['automatic_proxy_pass']
 
 
 def test_approved_sources_still_require_complete_sets_and_cited_evidence():
@@ -165,6 +182,10 @@ def test_cli_defaults_safe_and_requires_explicit_live_calls():
     with pytest.raises(SystemExit):
         parse_args(["--limit", "0"])
     assert parse_args(["--mode", "live", "--layers", "index"]).layers == ["index"]
+    assert args.conversation_backend == 'http'
+    local = parse_args(['--mode', 'live', '--layers', 'conversations', '--conversation-backend', 'local',
+                        '--allow-model-calls', '--allow-conversation-writes', '--save-traces'])
+    assert local.conversation_backend == 'local' and local.save_traces
 
 
 def test_targeted_ids_are_offline_by_default_and_filter_before_limit(tmp_path):
@@ -253,6 +274,12 @@ def test_baseline_rejects_different_scopes_and_compares_like_for_like():
     assert compare_baseline(current, previous)["status"] == "incompatible"
 
 
+def test_baseline_rejects_changed_conversation_backend_or_annotation_hash():
+    report = dict(mode='live', conversation_backend='http', conversations_sha256='r5', layers={})
+    assert compare_baseline(dict(report, conversation_backend='local'), report)['status'] == 'incompatible'
+    assert compare_baseline(dict(report, conversations_sha256='r6'), report)['status'] == 'incompatible'
+
+
 def test_replay_cli_produces_separate_layers_without_network(tmp_path):
     dataset = tmp_path / "dataset"
     dataset.mkdir()
@@ -276,7 +303,7 @@ def test_replay_cli_produces_separate_layers_without_network(tmp_path):
 
 def test_answer_trace_uses_actual_trimmed_context_not_raw_candidates(monkeypatch):
     from backend.app.knowledge import answer_service as module
-    from backend.app.knowledge.answer_models import AnswerDraft
+    from backend.app.knowledge.answer_models import GenerationAnswerDraft
     from backend.app.knowledge.context_builder import ContextBuilder
     scope = RetrievalScope(uuid4(), uuid4())
     doc = Document(id="c1", page_content="开头。" * 100 + "不可进入截断上下文的尾部",
@@ -284,7 +311,10 @@ def test_answer_trace_uses_actual_trimmed_context_not_raw_candidates(monkeypatch
                                  source="private.docx", document_name="private", section_path="说明"))
     retrieval = SimpleNamespace(search=lambda *a, **kw: [doc])
     fake_model = SimpleNamespace(with_structured_output=lambda schema:
-                      SimpleNamespace(invoke=lambda messages: AnswerDraft(answerable=False, refusal_reason="资料不足")))
+                      SimpleNamespace(invoke=lambda messages: GenerationAnswerDraft(
+                          answerable=False, refusal_reason="资料不足", coverage=[dict(
+                              requirement_id="Q1", aspect="q", status="insufficient", claim_indices=[],
+                              missing_information="资料不足")])) )
     monkeypatch.setattr(module, "ChatOpenAI", lambda **kwargs: fake_model)
     settings = SimpleNamespace(chat_model="fake", chat_base_url="https://unused.example", chat_api_key="test-only")
     service = module.AnswerService(settings=settings, retrieval_service=retrieval,

@@ -1,6 +1,7 @@
 """Unified reports explicitly distinguish untested stages from passing checks."""
 import json
 from datetime import datetime, timezone
+from .metrics import summarize_generation
 
 
 LAYERS = ("parsing", "index", "retrieval", "rerank", "context", "answer", "conversations", "security", "performance")
@@ -33,6 +34,7 @@ def quality_layers(quality):
         metric = record.get("metrics", {}).get("answer")
         status = "error" if record["status"] == "error" else "skipped" if metric is None else "passed" if metric["automatic_proxy_pass"] else "failed"
         answer_records.append(dict(id=record["id"], status=status, metrics=metric,
+                                   generation=record.get("metrics", {}).get("generation"),
                                    response=record.get("response"), error_type=record.get("error_type")))
     from .metrics import summarize_records
     return dict(
@@ -40,6 +42,7 @@ def quality_layers(quality):
                        **{key: value for key, value in stage_report(quality, "fusion").items() if key != "status"}),
         rerank=stage_report(quality, "rerank"), context=stage_report(quality, "context"),
         answer=dict(status="completed", summary=summarize_records(answer_records), records=answer_records,
+                    generation_metrics=summarize_generation(quality.get("records", [])),
                     limitation="Phrase/source proxies; semantic correctness and faithfulness require human review."))
 
 
@@ -59,7 +62,8 @@ def outcome(report):
 
 def compare_baseline(report, baseline):
     """Only compare like-for-like runs; never turn historical Chroma numbers into current gates."""
-    keys = ("schema_version", "mode", "dataset_sha256", "selected_case_ids", "requested_conversation_ids", "corpus_manifest_sha256", "scope_config_sha256")
+    keys = ("schema_version", "mode", "dataset_sha256", "selected_case_ids", "requested_conversation_ids",
+            "conversation_backend", "conversations_sha256", "corpus_manifest_sha256", "scope_config_sha256")
     mismatches = [key for key in keys if report.get(key) != baseline.get(key)]
     if set(report["layers"]) != set(baseline.get("layers", {})):
         mismatches.append("selected_layers")
@@ -98,6 +102,17 @@ def write_report(report, directory):
         metrics = layer.get("metrics") or layer.get("stages")
         if metrics:
             lines.extend(["```json", json.dumps(metrics, ensure_ascii=False, indent=2), "```", ""])
+        generation = layer.get("generation_metrics")
+        if generation is not None:
+            lines.extend(["首次生成与补全诊断（不等于语义准确率）：", "",
+                          "```json", json.dumps(generation, ensure_ascii=False, indent=2), "```", ""])
+            rows = (layer.get("records", []) if name == "answer" else
+                    [turn for record in layer.get("records", []) for turn in record.get("turns", [])])
+            for row in rows:
+                metric = row.get("generation") if name == "answer" else row.get("metrics", {}).get("generation")
+                if metric and metric.get("observed") and not metric["first_pass"]["automatic_proxy_pass"]:
+                    lines.append(f"- {row['id']} 首次生成未通过代理检查；缺失事实：{metric['first_pass']['missing_facts']}；最终结果：{row['status']}")
+            lines.append("")
         flagged = [row for row in layer.get("records", []) if row["status"] not in ("passed", "not_applicable")]
         if flagged:
             lines.extend(["非通过项（完整结果见report.json）：", ""])

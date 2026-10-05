@@ -6,7 +6,7 @@ from uuid import UUID
 
 import requests
 
-from .metrics import normalize, score_answer, summarize_records
+from .metrics import normalize, score_answer, summarize_records, summarize_generation
 from .runner import token_from_environment
 
 
@@ -104,6 +104,7 @@ def evaluate_conversations(sessions, config, *, client=None):
         print(f"Evaluated conversation {case['id']}", flush=True)
     return dict(status="completed", evaluation_type="real_http_conversation_api",
                 summary=summarize_records(records), records=records,
+                generation_metrics=summarize_generation([turn for row in records for turn in row['turns']]),
                 limitations=["Creates then deletes only evaluation-owned conversations; append-only audit events remain.",
                              "Answer/fact/source checks are proxies; rewrite correctness needs manual review."])
 

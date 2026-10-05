@@ -8,6 +8,8 @@ from pathlib import Path
 from langchain_core.documents import Document
 from ..documents.policy_metadata import policy_label
 from .evidence_quality import evidence_role, prioritize_content
+from .context_selection import select_context_chunks, source_key
+from ..evaluation.trace import record_context_selection
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,7 @@ class ContextItem:
     quality: dict | None = None
     parser: str | None = None
     cleaning_version: str | None = None
+    matched_incident_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,10 @@ class ContextBuilder:
             return BuiltContext.empty()
 
         documents = prioritize_content(self._deduplicate(documents), question=question)
+        candidate_count = len(documents)
+        documents, reservations = select_context_chunks(
+            documents, question=question, max_per_source=self.max_chunks_per_source,
+        )
         items: list[ContextItem] = []
         rendered_blocks: list[str] = []
         source_counts: dict[str, int] = {}
@@ -85,10 +92,8 @@ class ContextBuilder:
 
             metadata = document.metadata
             source = str(metadata.get("source", "未知来源"))
-            source_key = str(
-                metadata.get("source_id") or source
-            )
-            count = source_counts.get(source_key, 0)
+            logical_source = source_key(document)
+            count = source_counts.get(logical_source, 0)
 
             if count >= self.max_chunks_per_source:
                 continue
@@ -177,14 +182,22 @@ class ContextBuilder:
                 quality=metadata.get("quality"),
                 parser=metadata.get("parser"),
                 cleaning_version=metadata.get("cleaning_version"),
+                matched_incident_ids=tuple(metadata.get('matched_incident_ids') or ()),
             )
             rendered_block = f"{prefix}{content}"
 
             items.append(item)
             rendered_blocks.append(rendered_block)
-            source_counts[source_key] = count + 1
+            source_counts[logical_source] = count + 1
             used_characters += separator_size + len(rendered_block)
 
+        record_context_selection(dict(
+            candidate_count=candidate_count, source_limited_count=len(documents),
+            selected_count=len(items), selected_characters=used_characters,
+            max_characters=self.max_characters, max_chunks_per_source=self.max_chunks_per_source,
+            reservations=[dict(row, included=any(item.chunk_id == row["chunk_id"] for item in items))
+                          for row in reservations],
+        ))
         if not items:
             return BuiltContext.empty()
 

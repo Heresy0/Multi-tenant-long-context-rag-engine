@@ -31,12 +31,10 @@ def test_correct_schedule_is_verified_and_program_rendered():
     assert AnswerValidator().validate(draft=AnswerDraft(answerable=True, claims=[claim]), context=context(), question=QUESTION).valid
 
 
-@pytest.mark.parametrize("change", ["wrong_result", "missing_interval", "reordered", "wrong_unit", "invented_quote", "uncited_source", "false_origin", "expression", "extra_prose"])
+@pytest.mark.parametrize("change", ["missing_interval", "reordered", "wrong_unit", "invented_quote", "uncited_source", "false_origin", "expression", "extra_prose"])
 def test_forged_or_wrong_computations_are_rejected(change):
     claim = retry_claim()
-    if change == "wrong_result":
-        claim.calculation.result = "21:32:00"
-    elif change == "missing_interval":
+    if change == "missing_interval":
         claim.calculation.inputs.pop(2)
     elif change == "reordered":
         claim.calculation.inputs[1], claim.calculation.inputs[2] = claim.calculation.inputs[2], claim.calculation.inputs[1]
@@ -81,10 +79,17 @@ def test_cross_midnight_requires_day_qualifier_and_no_code_operation():
     claim.calculation.inputs[0].quote = "23:30:00"
     assert compute(claim, context(), QUESTION.replace("18:00:00", "23:30:00")).result == "第2日02:12:30"
     claim.calculation.result = "02:12:30"
-    with pytest.raises(CalculationError):
-        compute(claim, context(), QUESTION.replace("18:00:00", "23:30:00"))
+    computed = compute(claim, context(), QUESTION.replace("18:00:00", "23:30:00"))
+    assert computed.result == "第2日02:12:30" and computed.model_result_matches is False
     with pytest.raises(ValidationError):
         CalculationRequest(operation="python_eval", inputs=claim.calculation.inputs, result="0")
+
+
+@pytest.mark.parametrize('guess', ['21:42:30', None, '随便猜测'])
+def test_valid_inputs_not_model_guess_authorize_calculation(guess):
+    computed = compute(retry_claim(guess), context(), QUESTION)
+    assert computed.result == '20:42:30'
+    assert computed.model_result_matches is (None if guess is None else False)
 
 
 @pytest.mark.parametrize("question", [

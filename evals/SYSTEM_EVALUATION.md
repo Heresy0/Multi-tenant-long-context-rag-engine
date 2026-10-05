@@ -62,6 +62,10 @@
 
 精确选择单轮题可用 `--case-ids XH-016 XH-E-060`；多轮按完整组选择 `--conversation-ids XH-MT-02 XH-D-MT-05`。筛选后才应用`--limit`，未知题号报错，未选题不算通过。r3逐题等价短语、充分来源组合与OCR校对边界见 [定向回归优化](../docs/RAG_REGRESSION_OPTIMIZATION.md)。
 
+2026-10-05新增问题感知选材、历史规则适用提示和r5多轮标注，模块说明、旧候选上下文检查及定向复测命令见 [上下文与时间优化](../docs/CONTEXT_TIME_OPTIMIZATION.md)。旧候选重建只验证证据选材，不是重新测得的答案准确率。
+
+如需保存真实服务链路的多轮逐轮候选和上下文，使用 `--conversation-backend local --save-traces`，仍须 `--allow-model-calls --allow-conversation-writes` 和有效身份；详见 [答案完整性修复与多轮诊断](../docs/ANSWER_COMPLETENESS_FIX.md)。该模式不验证HTTP网关、限流或接口审计，不能与默认HTTP模式直接作为同口径基线比较，也不会向普通接口开放快照。
+
 质量层在本地调用当前正式后端服务，而不是开放原始片段的调试HTTP接口。JWT通过正式OIDC验签并映射到活动用户；每题按AuthorizationService重新取得范围。数据访问只读，失败会回滚读事务。检索、重排、上下文和答案使用同一次流水线结果；不会为每层重复生成答案。
 
 注意：这是后端业务链质量评估，不含HTTP网关、限流、审计和网络耗时。真实接口最终回答仍可使用旧的`evaluate_answers.py`；多轮/权限用例通过真实HTTP执行，性能通过Locust执行。
@@ -103,6 +107,8 @@
 ACL-08/10/11/12涉及状态变化、真实他人会话、跨租户及完全无可读库，需要独立准备和专项验收。本入口当前会明确跳过在线案例；离线单元回归覆盖相关代码路径。原题集仍保留这些验收项，不将它们删掉或当成已通过。
 
 ## 5. 指标与报告口径
+
+首次生成与补全已分别评分：answer层的generation_metrics显示补全前事实完整率、代理通过率和追加率；本地多轮也支持。旧trace和纯HTTP多轮没有内部首次生成观察时，比例为null，不算通过。详见[首次回答完整性说明](../docs/FIRST_PASS_ANSWER_COVERAGE.md)及[8道新组合问法](first_pass_generalization/README.md)。
 
 默认输出到`evals/reports/system/<UTC时间戳>/`：
 

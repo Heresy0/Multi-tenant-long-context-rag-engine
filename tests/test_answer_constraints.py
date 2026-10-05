@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from backend.app.knowledge.answer_constraints import complete_cited_table_conditions, generation_constraints
+from backend.app.knowledge.answer_constraints import complete_cited_table_conditions, generation_constraints, temporal_evidence_context
 from backend.app.knowledge.answer_models import AnswerClaim, AnswerDraft
 
 TABLE = '''级别|定义|验收处理
@@ -57,3 +57,31 @@ def test_obvious_condition_bypass_is_refused_not_silently_appended():
 
 def test_generation_time_hint_uses_business_year():
     assert '2025-01-01至2025-12-31' in generation_constraints('截至2026-10-04，2025年标准？')
+
+
+def policy_context(**policy):
+    return SimpleNamespace(items=[SimpleNamespace(citation_id='资料1', policy=policy)])
+
+
+def test_historical_reminder_does_not_require_a_current_replacement_number():
+    evidence = policy_context(effective_from='2024-01-01', effective_to='2025-06-30', business_status='已归档')
+    relation = temporal_evidence_context('2024年住宿标准？', evidence.items)
+    assert relation['evidence'][0]['relation'] == 'covers_query_period'
+    text = generation_constraints('截至2026-10-04，2024年标准？', evidence)
+    assert '资料1' in text and '不要求额外找到现行替代金额' in text
+    assert '同一时期、同一对象和场景' in text
+    assert '550' not in text  # No answer-specific facts embedded in the aid.
+
+
+def test_partial_unknown_invalid_and_outside_period_are_not_certified_as_covering():
+    for policy, expected in [
+        ({'effective_from': '2024-07-01', 'effective_to': '2025-01-01'}, 'overlaps_query_period'),
+        ({'effective_from': '2025-01-01', 'effective_to': '2025-12-31'}, 'outside_query_period'),
+        ({'effective_from': '2024-01-01'}, 'unknown'),
+        ({'effective_from': '2025-01-01', 'effective_to': '2023-01-01'}, 'metadata_warning'),
+        ({'effective_from': 'bad', 'review_date': '2025-01-01'}, 'unknown'),
+    ]:
+        evidence = policy_context(**policy)
+        assert temporal_evidence_context('2024年标准？', evidence.items)['evidence'][0]['relation'] == expected
+        assert '有效期覆盖业务时间的资料：' not in generation_constraints('2024年标准？', evidence)
+    assert temporal_evidence_context('2024年和2025年比较？', []) is None

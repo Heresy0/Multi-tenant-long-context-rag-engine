@@ -6,6 +6,8 @@ from langchain_core.documents import Document
 from ..documents.policy_metadata import extract_policy, parse_date, policy_label
 from .evidence_quality import evidence_role, prefer_content
 from .temporal import query_period
+from .evidence_expansion import (incident_identifiers, incident_source_matches,
+                                 asks_incident_cause, incident_cause_quote)
 
 
 def select_evidence(question, documents):
@@ -54,19 +56,32 @@ def select_evidence(question, documents):
     replacements = {key: value for key, value in replacements.items() if acyclic(key)}
     selected = [doc for doc in selected if (str(doc.metadata["policy"].get("document_code")),
                 str(doc.metadata["policy"].get("rule_scope"))) not in replacements]
+    incident_matches = incident_source_matches(question, selected)
+    for doc in selected:
+        key = str(doc.metadata.get('document_id') or doc.metadata.get('source_id')
+                  or doc.metadata.get('source') or '')
+        # Request-local provenance, recomputed rather than trusted from storage.
+        doc.metadata['matched_incident_ids'] = sorted(incident_matches.get(key, set()))
     # Prefer actual content before the final top-k; topic preference must not
     # promote a specialist cover over usable body evidence from other documents.
     def identity(doc):
         return (str(doc.metadata.get("document_id") or doc.metadata.get("source", "")),
                 getattr(doc, "id", None) or doc.metadata.get("chunk_id") or doc.page_content)
     indices = {identity(doc): i for i, doc in enumerate(documents)}
-    webhook_only = bool(re.search("Webhook", question, re.I)) and not re.search(r"API|开放平台", question, re.I)
+    # A question about a concrete incident must not become a generic Webhook
+    # policy lookup merely because the user asks whether that was the cause.
+    webhook_only = (bool(re.search("Webhook", question, re.I))
+                    and not re.search(r"API|开放平台", question, re.I)
+                    and not incident_identifiers(question))
     content_first = prefer_content(question)
     def priority(doc):
         p = doc.metadata["policy"]
         specific = webhook_only and "webhook" in p.get("topics", [])
         front_matter = content_first and doc.metadata["evidence_role"] == "front_matter"
-        return (front_matter, not specific, indices.get(identity(doc), len(documents)))
+        incident_cause = (asks_incident_cause(question) and doc.metadata['matched_incident_ids']
+                          and incident_cause_quote(doc.page_content, str(doc.metadata.get('section_path', ''))))
+        return (front_matter, not bool(incident_cause), not specific,
+                indices.get(identity(doc), len(documents)))
     selected.sort(key=priority)
     return selected
 

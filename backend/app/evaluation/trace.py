@@ -56,11 +56,13 @@ def record_documents(stage, documents):
         name = metadata.get("document_name") or PurePosixPath(str(metadata.get("source", "")).replace("\\", "/")).name
         rows.append(dict(rank=rank, document_name=str(name), content=document.page_content,
                          chunk_id=str(getattr(document, "id", None) or metadata.get("chunk_id") or ""),
+                         document_id=str(metadata.get("document_id") or ""),
                          tenant_id=str(metadata.get("tenant_id")),
                          knowledge_base_id=str(metadata.get("knowledge_base_id")),
                          rerank_status=metadata.get("rerank_status"),
                          policy=metadata.get("policy"),
                          policy_selection=metadata.get("policy_selection"),
+                         matched_incident_ids=metadata.get('matched_incident_ids', []),
                          evidence_role=metadata.get("evidence_role"),
                          quality=metadata.get("quality"),
                          cleaning_version=metadata.get("cleaning_version"),
@@ -86,6 +88,7 @@ def record_context(context):
                              quality=item.quality,
                              parser=item.parser,
                              cleaning_version=item.cleaning_version,
+                             matched_incident_ids=list(item.matched_incident_ids),
                              knowledge_base_id=str(item.knowledge_base_id)))
     trace.stages["context"] = rows
 
@@ -94,3 +97,43 @@ def record_calculations(records):
     trace = _current.get()
     if trace is not None:
         trace.stages["calculations"] = deepcopy(records)
+
+
+def record_context_selection(decision):
+    trace = _current.get()
+    if trace is not None:
+        trace.stages["context_selection"] = [deepcopy(decision)]
+
+
+def record_answer_decision(*, stage, answerable, reason=None, temporal=None):
+    """Structured outcome only; never collect hidden model reasoning."""
+    trace = _current.get()
+    if trace is not None:
+        trace.stages.setdefault("answer_decisions", []).append(dict(
+            stage=stage, answerable=answerable, reason=reason, temporal=deepcopy(temporal),
+        ))
+
+
+def record_answer_completion(records):
+    trace = _current.get()
+    if trace is not None:
+        trace.stages['answer_completion'] = deepcopy(records)
+
+
+def record_answer_generation(response, claims, coverage, *, changed, validation_errors):
+    """Opt-in visible first answer/coverage only, never hidden reasoning or public API fields."""
+    trace = _current.get()
+    if trace is not None:
+        trace.stages['answer_generation'] = [dict(
+            response=response.model_dump(mode='json'), claims=deepcopy(claims),
+            coverage=deepcopy(coverage), completion_changed=changed,
+            validation_errors=list(validation_errors),
+        )]
+
+
+def record_conversation_resolution(question, resolved, history_count):
+    trace = _current.get()
+    if trace is not None:
+        trace.stages['conversation_resolution'] = [dict(
+            question=question, retrieval_question=resolved, history_count=history_count,
+        )]

@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
-from .answer_models import AnswerDraft
+from .answer_models import AnswerDraft, GenerationAnswerDraft
+from .answer_coverage import coverage_errors
 from .context_builder import BuiltContext
 from .calculation_service import CalculationError, compute
 from ..documents.policy_metadata import policy_label
@@ -54,11 +55,13 @@ class AnswerValidator:
     def validate(
         self,
         *,
-        draft: AnswerDraft,
+        draft: AnswerDraft | GenerationAnswerDraft,
         context: BuiltContext,
         question: str = "",
     ) -> ValidationResult:
         errors: list[str] = []
+        if isinstance(draft, GenerationAnswerDraft):
+            errors.extend(coverage_errors(draft, question, context))
 
         allowed_ids = {
             item.citation_id

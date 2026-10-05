@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from uuid import UUID
 
-from .metrics import evidence_metrics, score_answer, summarize_records, summarize_stages
+from .metrics import evidence_metrics, score_answer, score_generation, summarize_records, summarize_stages
 from .trace import capture_trace, record_context
 
 
@@ -23,12 +23,13 @@ def score_trace(case, trace, *, include_answer=False):
     if trace.get("error_type"):
         return dict(id=case["id"], status="error", error_type=trace["error_type"], metrics=metrics)
     status = "partial"
-    if case["answerable"] and "context" in metrics:
+    if case["answerable"] and metrics.get("context", {}).get("scored"):
         status = "passed" if metrics["context"]["all_evidence_present"] else "failed"
     if include_answer:
         if "response" not in trace:
             return dict(id=case["id"], status="skipped", reason="no_final_response_in_trace", metrics=metrics)
         metrics["answer"] = score_answer(case, trace["response"], stages.get("context"))
+        metrics["generation"] = score_generation(case, trace)
         status = "passed" if metrics["answer"]["automatic_proxy_pass"] else "failed"
     if violations:
         status = "failed"

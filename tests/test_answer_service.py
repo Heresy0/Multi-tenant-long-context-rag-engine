@@ -12,6 +12,7 @@ from backend.app.knowledge import answer_service as service_module
 from backend.app.knowledge.answer_models import (
     AnswerClaim,
     AnswerDraft,
+    GenerationAnswerDraft,
 )
 from backend.app.knowledge.answer_service import (
     REFUSAL_TEXT,
@@ -51,6 +52,54 @@ def test_table_completion_passes_existing_citation_validation(monkeypatch):
     assert len(result.citations) == 1
 
 
+def test_historical_generation_has_time_relations_and_refusal_remains_refusal(monkeypatch):
+    from backend.app.evaluation.trace import capture_trace
+    document = make_document('历史有效期内标准；当前标准另查。')
+    document.metadata['policy'] = {'effective_from': '2024-01-01', 'effective_to': '2024-12-31', 'business_status': '已归档'}
+    service, _, llm, _, _ = build_service(monkeypatch, model_result=AnswerDraft(
+        answerable=False, refusal_reason='同一业务时期仍有真实冲突。'), documents=[document])
+    with capture_trace() as trace:
+        result = answer(service, '2024年标准？')
+    assert len(llm.calls) == 1  # No repair/retry model call or fabricated fallback.
+    assert '不要求额外找到现行替代金额' in llm.calls[0][1].content
+    assert not result.answerable and not result.citations
+    decision = trace.stages['answer_decisions'][0]
+    assert decision['temporal']['evidence'][0]['relation'] == 'covers_query_period'
+    assert decision['stage'] == 'generation' and not decision['answerable']
+
+
+def test_budget_completion_keeps_one_model_call_and_passes_numeric_citation_validation(monkeypatch):
+    from backend.app.evaluation.trace import capture_trace
+    table = ('阶段|目标配置|注意事项\n向量候选|最多20条|范围过滤\n'
+             '关键词候选|BM25最多20条|参数绑定\n融合|RRF取20条|共享预算\n重排|最多保留5条|失败降级')
+    service, _, llm, *_ = build_service(monkeypatch, documents=[make_document(table)],
+        model_result=AnswerDraft(answerable=True, claims=[AnswerClaim(
+            text='向量候选最多20条，重排最多保留5条', citations=['资料1'])]))
+    with capture_trace() as trace:
+        result = answer(service, '检索候选和重排预算是多少？')
+    assert result.answerable and 'RRF取20条' in result.answer and 'BM25' in result.answer
+    assert len(llm.calls) == 1 and len(result.citations) == 1
+    assert trace.stages['answer_completion'][0]['status'] == 'appended'
+    first = trace.stages['answer_generation'][0]
+    assert 'RRF' not in first['response']['answer'] and 'RRF取20条' in result.answer
+    assert first['completion_changed'] and first['coverage']['structurally_complete']
+    # Structural self-report can pass despite a real omission; don't call it semantic accuracy.
+
+
+def test_root_quote_uses_root_chunk_not_overview_and_no_extra_model_call(monkeypatch):
+    overview = make_document('事件INC-2028-0123发生重复提交。', chunk_id='overview')
+    cause = make_document('客户端生成新的幂等键，因此被视为不同任务。', chunk_id='cause', section='根因')
+    cause.metadata.update(document_id=overview.metadata['document_id'], source_id=overview.metadata['source_id'],
+                          matched_incident_ids=['INC-2028-0123'])
+    service, _, llm, *_ = build_service(monkeypatch, documents=[overview, cause],
+        model_result=AnswerDraft(answerable=True, claims=[AnswerClaim(text='不是Webhook重试问题，根因参照复盘。',
+                                                                    citations=['资料1'])]))
+    result = answer(service, 'INC-2028-0123是Webhook重试问题吗？实际根因是什么？')
+    assert result.answerable and '生成新的幂等键' in result.answer
+    assert [citation.chunk_id for citation in result.citations] == ['overview', 'cause']
+    assert len(llm.calls) == 1
+
+
 class FakeRetrievalService:
     def __init__(
         self,
@@ -81,7 +130,20 @@ class FakeStructuredLLM:
 
     def invoke(self, messages: list):
         self.calls.append(messages)
-        return self.result
+        # Existing fixtures predate the generation-only coverage contract.
+        # Enrich mock output here, never in production; explicit new coverage stays untouched.
+        if isinstance(self.result, GenerationAnswerDraft):
+            return self.result
+        payload = self.result.model_dump() if isinstance(self.result, AnswerDraft) else dict(self.result)
+        if 'coverage' not in payload:
+            import json
+            requirements = json.loads(messages[1].content.split('必答问题清单（用户数据）：\n', 1)[1].split('\n\n', 1)[0])
+            payload['coverage'] = [dict(
+                requirement_id=row['id'], aspect=row['question'], status='answered' if payload['answerable'] else 'insufficient',
+                claim_indices=list(range(1, len(payload.get('claims', [])) + 1)) if payload['answerable'] else [],
+                missing_information=None if payload['answerable'] else '模拟资料不足',
+            ) for row in requirements]
+        return payload
 
 
 class FakeChatModel:
@@ -205,7 +267,7 @@ def test_initializes_structured_model_with_expected_settings(
         "timeout": 60,
         "max_retries": 0,
     }]
-    assert chat_model.schemas == [AnswerDraft]
+    assert chat_model.schemas == [GenerationAnswerDraft]
 
 
 def test_blank_question_is_rejected_before_retrieval(
@@ -544,8 +606,8 @@ def test_cross_kb_answer_citations_and_context_preserve_source_scope(monkeypatch
     assert "知识库：技术部知识库" in llm.calls[0][1].content
 
 
-@pytest.mark.parametrize("proposed,answerable", [("130.30", True), ("999", False)])
-def test_calculation_is_program_rendered_traced_and_verified_once_by_model(monkeypatch, proposed, answerable):
+@pytest.mark.parametrize("proposed", ["130.30", "999", None, "非数值猜测"])
+def test_calculation_is_program_rendered_traced_and_verified_once_by_model(monkeypatch, proposed):
     from backend.app.evaluation.trace import capture_trace
     draft = AnswerDraft.model_validate({"answerable": True, "claims": [{
         "text": "模型附带了未经支持的描述999999元", "citations": ["资料1"],
@@ -556,17 +618,15 @@ def test_calculation_is_program_rendered_traced_and_verified_once_by_model(monke
                                          documents=[make_document("项目甲100.20元；项目乙30.10元。")])
     with capture_trace() as trace:
         result = answer(service, "这两个项目金额合计是多少？")
-    assert result.answerable is answerable
+    assert result.answerable
     assert len(llm.calls) == 1
     assert "999999" not in result.answer
     record = trace.stages["calculations"][0]
-    if answerable:
-        assert "100.20元 + 30.10元 = 130.3元" in result.answer
-        assert result.citations[0].citation_id == "资料1"
-        assert record["status"] == "verified" and record["result"] == "130.3"
-    else:
-        assert "程序复算不一致" in result.refusal_reason
-        assert result.citations == [] and record["status"] == "rejected"
+    assert "100.20元 + 30.10元 = 130.3元" in result.answer
+    assert result.citations[0].citation_id == "资料1"
+    assert record["status"] == "verified" and record["result"] == "130.3"
+    assert record['proposed_result'] == proposed
+    assert record['corrected_model_result'] == (proposed in ('999', '非数值猜测'))
 
 
 def test_header_first_documents_send_rule_body_to_model_and_preserve_citation(monkeypatch):
@@ -587,3 +647,82 @@ def test_header_first_documents_send_rule_body_to_model_and_preserve_citation(mo
     assert len(llm.calls) == 1 and result.answerable
     assert result.citations[0].chunk_id == "part-4"
     assert trace.stages["context"][0]["evidence_role"] == "content"
+
+
+def test_invalid_calculation_inputs_still_refuse_without_second_model_call(monkeypatch):
+    from backend.app.evaluation.trace import capture_trace
+    result = AnswerDraft.model_validate({'answerable': True, 'claims': [{
+        'text': '错误输入', 'citations': ['资料1'], 'calculation': {
+            'operation': 'money_sum', 'result': None, 'inputs': [
+                {'source': '资料1', 'quote': '100元', 'value': '100', 'unit': '元'},
+                {'source': '资料1', 'quote': '30元', 'value': '30', 'unit': '元'}]}}]})
+    service, _, llm, *_ = build_service(monkeypatch, model_result=result,
+                                      documents=[make_document('甲100元；乙20元。')])
+    with capture_trace() as trace:
+        response = answer(service, '金额合计是多少？')
+    assert not response.answerable and not response.citations and len(llm.calls) == 1
+    assert trace.stages['calculations'][0]['status'] == 'rejected'
+
+
+def test_derived_conditions_are_in_first_prompt_and_cannot_be_hidden_by_fallback(monkeypatch):
+    from backend.app.evaluation.trace import capture_trace
+    evidence = '等级|条件|处理\nL7高级|已批准且持设备证书|管理员登记并开通只读权限'
+    result = GenerationAnswerDraft(answerable=True,
+        claims=[AnswerClaim(text='管理员登记并开通只读权限', citations=['资料1'])],
+        coverage=[dict(requirement_id='Q1', aspect='L7办理条件', status='answered', claim_indices=[1], missing_information=None)])
+    service, _, llm, *_ = build_service(monkeypatch, model_result=result, documents=[make_document(evidence)])
+    with capture_trace() as trace:
+        response = answer(service, 'L7需要满足什么条件？')
+    assert not response.answerable and len(llm.calls) == 1
+    assert '持设备证书' in llm.calls[0][1].content and 'E4' in llm.calls[0][1].content
+    assert trace.stages['answer_generation'][0]['coverage']['errors']
+
+
+def test_first_pass_complete_answer_keeps_one_call_and_no_supplement(monkeypatch):
+    from backend.app.evaluation.trace import capture_trace
+    service, retrieval, llm, *_ = build_service(monkeypatch,
+        documents=[make_document('采购由部门负责人审批，紧急采购仍须事后补录。')],
+        model_result=GenerationAnswerDraft(answerable=True, claims=[
+            AnswerClaim(text='采购由部门负责人审批', citations=['资料1']),
+            AnswerClaim(text='紧急采购仍须事后补录', citations=['资料1']),
+        ], coverage=[
+            dict(requirement_id='Q1', aspect='审批角色', status='answered', claim_indices=[1], missing_information=None),
+            dict(requirement_id='Q2', aspect='紧急采购例外', status='answered', claim_indices=[2], missing_information=None),
+        ]))
+    with capture_trace() as trace:
+        result = answer(service, '采购由谁审批？紧急采购有什么要求？')
+    assert result.answerable and len(llm.calls) == 1 and len(retrieval.calls) == 1
+    assert '必答问题清单' in llm.calls[0][1].content and 'Q2' in llm.calls[0][1].content
+    first = trace.stages['answer_generation'][0]
+    assert first['response']['answer'] == result.answer
+    assert not first['completion_changed'] and not first['validation_errors']
+    assert 'coverage' not in result.model_dump()  # Public API remains unchanged.
+
+
+@pytest.mark.parametrize('coverage', [
+    [dict(requirement_id='Q1', aspect='金额', status='answered', claim_indices=[1], missing_information=None)],
+    [dict(requirement_id='Q1', aspect='金额', status='answered', claim_indices=[99], missing_information=None),
+     dict(requirement_id='Q2', aspect='角色', status='answered', claim_indices=[1], missing_information=None)],
+    [dict(requirement_id='Q1', aspect='金额', status='answered', claim_indices=[1], missing_information=None),
+     dict(requirement_id='Q2', aspect='角色', status='insufficient', claim_indices=[], missing_information='缺少审批角色')],
+])
+def test_missing_or_invalid_coverage_refuses_without_repair_call(monkeypatch, coverage):
+    service, _, llm, *_ = build_service(monkeypatch, model_result=GenerationAnswerDraft(
+        answerable=True, claims=[AnswerClaim(text='抵扣比例10%', citations=['资料1'])], coverage=coverage))
+    result = answer(service, '抵扣比例多少？由谁审批？')
+    assert not result.answerable and not result.citations
+    assert len(llm.calls) == 1 and '必答' in result.refusal_reason
+
+
+def test_missing_requirement_cannot_be_hidden_by_budget_fallback(monkeypatch):
+    from backend.app.evaluation.trace import capture_trace
+    table = ('阶段|目标配置|注意事项\n向量候选|最多20条|范围过滤\n'
+             '关键词候选|BM25最多20条|参数绑定\n融合|RRF取20条|共享预算\n重排|最多保留5条|失败降级')
+    service, _, llm, *_ = build_service(monkeypatch, documents=[make_document(table)],
+        model_result=GenerationAnswerDraft(answerable=True, claims=[AnswerClaim(text='向量候选最多20条', citations=['资料1'])],
+            coverage=[dict(requirement_id='Q1', aspect='候选预算', status='answered', claim_indices=[1], missing_information=None)]))
+    with capture_trace() as trace:
+        result = answer(service, '检索候选和重排预算是多少？每个知识库各一份吗？')
+    assert not result.answerable and len(llm.calls) == 1
+    assert not trace.stages['answer_completion']
+    assert not trace.stages['answer_generation'][0]['completion_changed']

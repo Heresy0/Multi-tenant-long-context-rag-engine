@@ -111,8 +111,11 @@ def test_real_corpus_header_first_reproduction_keeps_retry_body():
         pytest.skip("Local synthetic corpus not present")
     from backend.app.documents.text_splitter import split_txt
     chunks = split_txt(paths[0])
-    assert len(chunks) == 9
-    assert [evidence_role(doc) for doc in chunks[:4]] == ["front_matter"] * 4
+    # Corpus provenance cleanup removed a disclaimer chunk. Test the operative
+    # rule, not a stale exact chunk count/header count from the older edition.
+    assert chunks and all(doc.page_content.strip() for doc in chunks)
+    assert {evidence_role(doc) for doc in chunks} == {"front_matter", "content"}
+    chunks = sorted(chunks, key=lambda doc: evidence_role(doc) == "content")
     selected = select_evidence("Webhook返回401状态码时，也会自动重试吗？", chunks)[:8]
     built = ContextBuilder().build(selected)
     assert "其他4xx直接进入失败待核查" in built.text

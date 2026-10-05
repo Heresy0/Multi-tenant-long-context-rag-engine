@@ -3,6 +3,7 @@ import re
 import unicodedata
 from pathlib import PurePosixPath
 from urllib.parse import unquote
+from .assertions import negative_assertion_match
 
 
 def normalize(value):
@@ -55,8 +56,20 @@ def score_answer(case, response, context=None):
         raise ValueError("Response requires answer and citations")
     facts = case.get("required_facts", [])
     alternatives = case.get("fact_alternatives", {})
-    missing = [fact for fact in facts if not any(contains_fact(response["answer"], option)
-               for option in [fact, *alternatives.get(fact, [])])]
+    missing, contradictions = [], {}
+    for fact in facts:
+        options = [fact, *alternatives.get(fact, [])]
+        rule = case.get('fact_assertions', {}).get(fact)
+        if rule:
+            options = [normalize(option) for option in options]
+            rule = dict(rule, contradictions=[normalize(value) for value in rule.get('contradictions', [])])
+            matched, conflicting = negative_assertion_match(normalize(response['answer']), options, rule)
+            if conflicting:
+                contradictions[fact] = conflicting
+        else:
+            matched = any(contains_fact(response['answer'], option) for option in options)
+        if not matched:
+            missing.append(fact)
     expected = {document_key(item["document"]) for item in case.get("expected_evidence", [])}
     expected.update(document_key(name) for name in case.get("required_source_documents", []))
     cited = {document_key(item.get("document_name", "")) for item in response["citations"]}
@@ -87,6 +100,7 @@ def score_answer(case, response, context=None):
     else:
         proxy_pass = answerability_correct and not response["citations"]
     return dict(answerability_correct=answerability_correct, missing_facts=missing,
+                contradictory_facts=contradictions,
                 fact_coverage=(len(facts) - len(missing)) / len(facts) if facts else None,
                 all_required_sources_cited=expected.issubset(cited) if expected else None,
                 citation_source_recall=len(expected & cited) / len(expected) if expected else None,
@@ -103,6 +117,45 @@ def summarize_records(records):
     return dict(total=len(records), **counts,
                 pass_rate=counts["passed"] / (counts["passed"] + counts["failed"])
                 if counts["passed"] + counts["failed"] else None)
+
+
+def score_generation(case, trace):
+    """Same-call pre-supplement response; historical/HTTP-only runs stay unobserved."""
+    stages = trace.get("stages", {})
+    rows = stages.get("answer_generation", [])
+    if not rows:
+        return dict(observed=False, reason="no_first_pass_observation")
+    row = rows[0]
+    first = score_answer(case, row["response"], stages.get("context"))
+    # A safety refusal after an invalid generation is not a successful first
+    # model answer, even if the case itself expects refusal.
+    if row.get("validation_errors"):
+        first["automatic_proxy_pass"] = False
+    complete = (row["response"]["answerable"] and not first["missing_facts"]
+                if case["answerable"] and case.get("required_facts") else None)
+    return dict(observed=True, first_pass=first, first_pass_response=row["response"],
+                first_pass_fact_complete=complete,
+                structurally_complete=row.get("coverage", {}).get("structurally_complete"),
+                first_pass_validation_errors=row.get("validation_errors", []),
+                completion_changed=row["completion_changed"],
+                supplement_appended=any(item.get("status") == "appended"
+                                       for item in stages.get("answer_completion", [])),
+                limitation="Fact/structure proxies only; model-declared coverage is not independent semantic review.")
+
+
+def summarize_generation(records):
+    observations = [row.get("metrics", {}).get("generation", {}) for row in records]
+    observed = [row for row in observations if row.get("observed")]
+    labelled = [row for row in observed if row.get("first_pass_fact_complete") is not None]
+    return dict(observed_cases=len(observed), unobserved_cases=len(records) - len(observed),
+                fact_labelled_positive_cases=len(labelled),
+                first_pass_proxy_pass_rate=sum(row["first_pass"]["automatic_proxy_pass"] for row in observed) / len(observed)
+                    if observed else None,
+                first_pass_fact_complete_rate=sum(row["first_pass_fact_complete"] for row in labelled) / len(labelled)
+                    if labelled else None,
+                completion_change_rate=sum(row["completion_changed"] for row in observed) / len(observed) if observed else None,
+                supplement_append_rate=sum(row["supplement_appended"] for row in observed) / len(observed) if observed else None,
+                limitation="Observed generations only; pre-generation refusals, errors, old traces and HTTP-only turns are unobserved.")
 
 
 def summarize_stages(records):

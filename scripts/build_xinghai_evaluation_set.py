@@ -16,7 +16,7 @@ from scripts.evaluate_answers import load_dataset
 CORPUS = ROOT / "output/pdf/xinghai-department-corpus-v3"
 OUTPUT = ROOT / "evals/xinghai_v3"
 AS_OF = "2026-10-04"
-ANNOTATION_VERSION = "2026-10-05-r4"
+ANNOTATION_VERSION = "2026-10-06-r6"
 GROUPS = ["公司公共", "人力资源部", "技术部", "平台研发部"]
 PROFILES = {
     "仅公共测试用户": ["公司公共"],
@@ -217,10 +217,13 @@ def revise_single_annotations(single, names):
         "XH-E-048": {"不能": ["网络超时不等于业务未执行", "并不表示业务肯定没执行"]},
         "XH-E-050": {"不能": ["不应视为同一事件", "不作为同一事件"]},
         "XH-E-051": {"不自动": ["不会自动获得"]},
+        "XH-E-052": {"不自动删除": ["不等于自动删除", "不会自动删除", "不会把数据库记录一并删掉"]},
         "XH-E-056": {"不同": ["不相同"]},
     }
     for identifier, values in aliases.items():
         cases[identifier]["fact_alternatives"] = values
+    cases['XH-E-052']['fact_assertions'] = {'不自动删除': dict(
+        polarity='negative', contradictions=['会自动删除数据库记录', '会自动删除原记录', '会把数据库记录一并删掉'])}
     comparison = cases["XH-E-056"]
     legacy_api = "06_开放平台API接入与故障处理技术手册.docx"
     comparison["accepted_source_document_sets"] = [
@@ -242,6 +245,8 @@ def build_conversations(corpus, names):
     sessions[1]["turns"][0]["question"] = "截至2026-10-04，普通员工去上海住宿每晚最多报多少，依据哪个版本？"
     sessions[1]["turns"][2]["question"] = "那截至2026-10-04，部门负责人去上海每晚最多报多少？"
     sessions[2]["turns"][0]["question"] = "9月20日维护会影响什么，维护窗口是什么时候？"
+    # The root cause is genuinely required only when the question asks for it.
+    sessions[4]["turns"][1]["question"] = "是Webhook的重试问题吗？实际根因是什么？"
     additions = [
         ("XH-MT-06", [names[23]], [
             ("2000元的单人单次含税外部课程由谁审批？", "直属经理批准并由HR登记。"),
@@ -265,7 +270,7 @@ def build_conversations(corpus, names):
     facts = [
         [["2026年9月25日"], ["跨部门审批代理"], ["最终验收"]],
         [["650元", "1.4"], ["550元", "1.2"], ["850元"]],
-        [["报表导出", "02:00", "03:00"], ["登录", "不受"], ["不需要", "保留"]],
+        [["报表导出", "02:00", "03:00"], ["登录", "不受"], ["不需要"]],
         [["直属经理", "HR"], ["10个自然日"], ["10个自然日"]],
         [["13分钟"], ["不是", "幂等键"], ["6次", "首次"]],
         [["直属经理", "HR"], ["部门负责人", "HR负责人"], ["部门负责人", "HR负责人", "财务支持组"]],
@@ -301,6 +306,14 @@ def build_conversations(corpus, names):
     # All-access sessions may cite same-content notices, not just the scan.
     for turn in sessions[2]["turns"]:
         turn["accepted_source_document_sets"] = [[names[number]] for number in (12, 19, 20)]
+    sessions[2]["turns"][2].update(
+        optional_facts=["已有任务保留，并在恢复后继续执行"],
+        fact_alternatives={"不需要": ["无需重新提交", "无须重新提交", "不用重新提交"]},
+        semantic_checks=["核心是已有排队任务无需重新提交；保留和恢复后继续执行为补充，不因此扣分。若声称丢失或须重提仍是错误。"],
+    )
+    sessions[4]["turns"][1]["semantic_checks"] = [
+        "否定Webhook链路，并依据事件复盘说明客户报表调用重试未复用幂等键；不能仅引用通用Webhook边界。",
+    ]
     sessions[5]["turns"][2]["semantic_checks"] = ["8001元跨入第三档，部门负责人、HR负责人批准并由财务支持组复核，不能只回答财务支持组。"]
     sessions[6]["turns"][1]["semantic_checks"] = ["401不自动套用429/5xx重试，进入失败待核查；不能仅因包含失败待核查就判通过。"]
     sessions[6]["turns"][2].update(optional_facts=["待核实"], semantic_checks=["不能由超时推出业务肯定未执行。"])
@@ -308,6 +321,11 @@ def build_conversations(corpus, names):
         "不能": ["并不表示业务肯定没执行", "网络超时不等于业务未执行", "不把网络超时直接当作业务未执行"],
     }
     sessions[7]["turns"][2]["semantic_checks"] = ["过滤历史不等于自动删除数据库记录，接受语义等价否定表达。"]
+    sessions[7]['turns'][2].update(
+        fact_alternatives={'不会自动删除': ['不自动删除', '不等于自动删除', '不会把数据库记录一并删掉']},
+        fact_assertions={'不会自动删除': dict(polarity='negative',
+            contradictions=['会自动删除数据库记录', '会自动删除原记录', '会把数据库记录一并删掉'])},
+    )
     return sessions
 
 
@@ -388,6 +406,8 @@ XH-018中的“客户服务部”是历史台账归口标签，不代表此次�
 Alice目前可访问公共、HR、技术、平台研发四个知识库，不能充当“仅技术”或“仅HR”权限负例身份。权限案例需要独立且权限集合准确的测试账号，ACL-08/10/11/12还需隔离环境的有效前置条件；本题集不会创建账号或修改授权。
 
 ## 自动化使用边界
+
+标注r6仅增加已审核的否定同义表达与逐事实`fact_assertions`有限否定/矛盾保护，不改变问题、必答事实或来源要求。只有显式配置的事实启用该保护；它仍是字面规则，复杂否定、条件、对象绑定和忠实度仍需人工语义审查。旧报告仍对应旧标注，不会自动重写。
 
 “single_turn.jsonl”保留项目现有答案评估脚本所需字段，额外带来源部门、基准日期和证据要求。“by_scope”下单库文件可使用现有`scripts/evaluate_answers.py`分别测试；它每次要求固定一个知识库编号，不会根据每题自动切换知识库，也不会自动执行多轮或权限用例。
 
@@ -479,7 +499,7 @@ def build(corpus, output, *, refresh=False):
     load_dataset(output / "single_turn.jsonl")
     dump(output / "conversations.json", sessions)
     dump(output / "permissions.json", permission)
-    (output / "README.md").write_text(GUIDE, encoding="utf-8")
+    (output / "README.md").write_text(GUIDE.replace("2026-10-04-r2", ANNOTATION_VERSION), encoding="utf-8")
     questions = ["# 星海科技有限公司知识库测试题册", "", f"基准日期：{AS_OF}。本册不含标准答案；请勿入库。", "", "## 一、单轮问答（60题）", "",
                  f"标注修订：{ANNOTATION_VERSION}。", "", "每题新建会话；若使用单库模式，按来源范围分组，资料不足题使用全范围已授权身份。", ""]
     answers = ["# 标准答案与评分参考", "", f"标注修订：{ANNOTATION_VERSION}。", "", "核心事实必答，补充事实不强制；统一脚本支持已审核的逐题等价表达、充分来源组合与替代摘录。语义正确性仍需人工审查。来源摘录不是模型作答全文。细则见README。请勿入库。", "", "## 一、单轮问答", ""]
@@ -491,6 +511,8 @@ def build(corpus, output, *, refresh=False):
             target.extend(["已审核的充分来源组合：" + " 或 ".join(" + ".join(group) for group in case["accepted_source_document_sets"]), ""])
         if case.get('fact_alternatives'):
             target.extend(['逐题审核的等价表达：' + json.dumps(case['fact_alternatives'], ensure_ascii=False), ''])
+        if case.get('fact_assertions'):
+            target.extend(['有限否定/矛盾检查（仍非语义裁判）：' + json.dumps(case['fact_assertions'], ensure_ascii=False), ''])
     for case in single:
         label = f"### {case['id']} · {case['category']} · {case['difficulty']}"
         questions.extend([label, "", case["question"], "", f"范围：{case['expected_scope']}。", ""])

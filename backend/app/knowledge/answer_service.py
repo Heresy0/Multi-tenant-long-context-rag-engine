@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from .answer_models import (
     AnswerDraft,
+    GenerationAnswerDraft,
     AnswerResult,
     AnswerTimings,
     Citation,
@@ -21,11 +22,14 @@ from .context_builder import (
     ContextBuilder,
 )
 from .prompts import ANSWER_SYSTEM_PROMPT
-from .answer_constraints import complete_cited_table_conditions, generation_constraints
+from .answer_constraints import complete_cited_table_conditions, generation_constraints, temporal_evidence_context
+from .answer_completion import complete_answer
+from .answer_coverage import coverage_errors, coverage_snapshot, requirement_prompt
 from .temporal import future_certainty_gap
 from .retrieval_service import RetrievalService
 from ..security.retrieval_scope import RetrievalScope
-from ..evaluation.trace import record_context, record_documents, record_scope, record_calculations
+from ..evaluation.trace import (record_context, record_documents, record_scope, record_calculations,
+                                record_answer_decision, record_answer_completion, record_answer_generation)
 
 
 REFUSAL_TEXT = (
@@ -68,7 +72,7 @@ class AnswerService:
         )
 
         self._structured_llm = (
-            llm.with_structured_output(AnswerDraft)
+            llm.with_structured_output(GenerationAnswerDraft)
         )
 
     def answer(
@@ -139,6 +143,8 @@ class AnswerService:
                 "缺少已确定覆盖该未来期间的正式制度，不能把现行规则说成未来承诺。"
                 if future_gap else "没有检索到相关知识库资料。"
             )
+            record_answer_decision(stage="pre_generation", answerable=False,
+                                   reason="future_policy_gap" if future_gap else "empty_context")
             timings["render_ms"] = _elapsed_ms(
                 render_started
             )
@@ -156,9 +162,14 @@ class AnswerService:
         timings["generation_ms"] = _elapsed_ms(
             generation_started
         )
+        record_answer_decision(stage="generation", answerable=draft.answerable,
+                               reason=draft.refusal_reason,
+                               temporal=temporal_evidence_context(question, context.items))
 
         validation_started = time.perf_counter()
-        complete_cited_table_conditions(question, draft, context)
+        # Coverage is checked against the original draft, before any supplement.
+        # A fallback must not turn an explicit missing requirement into a success.
+        coverage_failures = coverage_errors(draft, question, context)
         calculation_records = []
         for claim in draft.claims:
             if claim.calculation is None:
@@ -167,16 +178,44 @@ class AnswerService:
                 calculation = compute(claim, context, question)
                 claim.text = calculation.rendered_text
                 calculation_records.append(dict(operation=claim.calculation.operation, status="verified",
-                                                result=calculation.result, inputs=list(calculation.inputs)))
+                                                result=calculation.result, inputs=list(calculation.inputs),
+                                                proposed_result=claim.calculation.result,
+                                                model_result_matches=calculation.model_result_matches,
+                                                corrected_model_result=calculation.model_result_matches is False))
             except CalculationError as exc:
                 calculation_records.append(dict(operation=claim.calculation.operation, status="rejected", reason=str(exc),
                                                 proposed=claim.calculation.model_dump()))
         record_calculations(calculation_records)
+        first_validation = self._validator.validate(draft=draft, context=context, question=question)
+        first_response = (self._render_result(draft=draft, context=context)
+                          if first_validation.valid and draft.answerable and not coverage_failures
+                          else self._refusal(draft.refusal_reason or "首次生成未通过证据与必答项校验。"))
+        first_claims = [claim.model_dump() for claim in draft.claims]
+        first_answerable = draft.answerable
+        first_coverage = coverage_snapshot(draft, question, context)
+        decisions = []
+        if not coverage_failures:
+            before_conditions = [claim.model_dump() for claim in draft.claims]
+            complete_cited_table_conditions(question, draft, context)
+            if before_conditions != [claim.model_dump() for claim in draft.claims] or draft.answerable != first_answerable:
+                decisions.append(dict(kind="table_conditions", status="appended" if draft.answerable else "refused_conflict"))
+            decisions.extend(complete_answer(question, draft, context))
+        record_answer_completion(decisions)
+        record_answer_generation(
+            first_response, first_claims, first_coverage,
+            changed=first_claims != [claim.model_dump() for claim in draft.claims] or first_answerable != draft.answerable,
+            validation_errors=list(dict.fromkeys([*coverage_failures, *first_validation.errors])),
+        )
+        # Coverage describes first-pass claims. Existing citation/calculation checks
+        # validate the final supplement too, without relabelling it as first-pass coverage.
         validation = self._validator.validate(
-            draft=draft,
+            draft=AnswerDraft.model_validate(draft.model_dump(exclude={"coverage"})),
             context=context,
             question=question,
         )
+        if coverage_failures:
+            validation.valid = False
+            validation.errors.extend(coverage_failures)
         timings["validation_ms"] = _elapsed_ms(
             validation_started
         )
@@ -187,6 +226,7 @@ class AnswerService:
                 "生成结果未通过证据与引用校验："
                 + "；".join(validation.errors)
             )
+            record_answer_decision(stage="validation", answerable=False, reason="evidence_validation_failed")
             timings["render_ms"] = _elapsed_ms(
                 render_started
             )
@@ -202,6 +242,7 @@ class AnswerService:
                 draft.refusal_reason
                 or "知识库资料不足。"
             )
+            record_answer_decision(stage="final", answerable=False, reason=draft.refusal_reason)
             timings["render_ms"] = _elapsed_ms(
                 render_started
             )
@@ -216,6 +257,7 @@ class AnswerService:
             draft=draft,
             context=context,
         )
+        record_answer_decision(stage="final", answerable=True)
         timings["render_ms"] = _elapsed_ms(
             render_started
         )
@@ -267,7 +309,7 @@ class AnswerService:
         *,
         question: str,
         context: BuiltContext,
-    ) -> AnswerDraft:
+    ) -> GenerationAnswerDraft:
         result = self._structured_llm.invoke([
             SystemMessage(
                 content=ANSWER_SYSTEM_PROMPT
@@ -275,21 +317,24 @@ class AnswerService:
             HumanMessage(
                 content=(
                     f"用户问题：\n{question}\n\n"
-                    f"作答检查：\n{generation_constraints(question)}\n\n"
+                    f"必答问题清单（用户数据）：\n{requirement_prompt(question, context)}\n\n"
+                    f"作答检查：\n{generation_constraints(question, context)}\n\n"
                     f"知识库资料：\n{context.text}"
                 )
             ),
         ])
 
-        if not isinstance(result, AnswerDraft):
-            result = AnswerDraft.model_validate(result)
+        if not isinstance(result, GenerationAnswerDraft):
+            if isinstance(result, AnswerDraft):
+                result = result.model_dump()
+            result = GenerationAnswerDraft.model_validate(result)
 
         return result
 
     def _render_result(
         self,
         *,
-        draft: AnswerDraft,
+        draft: AnswerDraft | GenerationAnswerDraft,
         context: BuiltContext,
     ) -> AnswerResult:
         item_map = {

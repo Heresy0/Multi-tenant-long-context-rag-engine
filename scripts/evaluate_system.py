@@ -13,6 +13,7 @@ from backend.app.evaluation.offline import evaluate_parsing, evaluate_security_u
 from backend.app.evaluation.reporting import LAYERS, compare_baseline, quality_layers, skipped, write_report
 from backend.app.evaluation.runner import evaluate_local, replay
 from backend.app.evaluation.http_runner import evaluate_conversations, evaluate_permissions
+from backend.app.evaluation.conversation_runner import evaluate_local_conversations
 from scripts.evaluate_answers import load_dataset
 
 
@@ -30,6 +31,8 @@ def parse_args(argv=None):
     parser.add_argument("--limit", type=int, help="Limit each case collection, not total model calls")
     parser.add_argument("--case-ids", nargs='+', help="Only these single-turn IDs; applied before --limit")
     parser.add_argument("--conversation-ids", nargs='+', help="Only these conversation group IDs; applied before --limit")
+    parser.add_argument('--conversation-backend', choices=('http', 'local'), default='http',
+                        help='HTTP by default; local services support opt-in per-turn diagnostic snapshots')
     parser.add_argument("--ocr", action="store_true", help="Run real local OCR if runtime is available")
     parser.add_argument("--allow-model-calls", action="store_true")
     parser.add_argument("--allow-conversation-writes", action="store_true")
@@ -67,6 +70,9 @@ def main(argv=None):
     report = dict(schema_version=1, mode=args.mode, selected_cases=len(cases), available_cases=full_case_count,
                   selected_case_ids=[case["id"] for case in cases],
                   requested_conversation_ids=args.conversation_ids,
+                  conversation_backend=args.conversation_backend if 'conversations' in args.layers else None,
+                  conversations_sha256=hashlib.sha256((args.dataset_dir / 'conversations.json').read_bytes()).hexdigest()
+                      if 'conversations' in args.layers else None,
                   corpus_manifest_sha256=hashlib.sha256((args.corpus / "manifest.json").read_bytes()).hexdigest()
                       if (args.corpus / "manifest.json").is_file() else None,
                   scope_config_sha256=None,
@@ -120,7 +126,12 @@ def main(argv=None):
                     if unknown:
                         raise ValueError('Unknown conversation group IDs: ' + ','.join(sorted(unknown)))
                     sessions = [row for row in sessions if row['id'] in args.conversation_ids]
-                run_layer("conversations", lambda: evaluate_conversations(sessions[:args.limit] if args.limit else sessions, config))
+                selected_sessions = sessions[:args.limit] if args.limit else sessions
+                if args.conversation_backend == 'local':
+                    run_layer('conversations', lambda: evaluate_local_conversations(selected_sessions, config,
+                              save_traces=directory / 'conversation_traces.jsonl' if args.save_traces else None))
+                else:
+                    run_layer("conversations", lambda: evaluate_conversations(selected_sessions, config))
             else:
                 report["layers"]["conversations"] = skipped("requires_allow_conversation_writes")
         if "security" in args.layers:

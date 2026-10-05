@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -14,7 +14,8 @@ class CalculationOperand(BaseModel):
 class CalculationRequest(BaseModel):
     operation: Literal["time_add", "money_sum", "money_difference"]
     inputs: list[CalculationOperand] = Field(min_length=2, max_length=20)
-    result: str = Field(min_length=1, max_length=50, description="模型提出的结果；程序会独立复算，不信任此值")
+    result: str | None = Field(default=None, min_length=1, max_length=50,
+                               description="可留null。若填写，仅作审计用的模型猜测；最终结果由程序验证输入后计算")
 
 
 class AnswerClaim(BaseModel):
@@ -43,6 +44,29 @@ class AnswerDraft(BaseModel):
     claims: list[AnswerClaim] = Field(
         default_factory=list
     )
+    refusal_reason: str | None = None
+
+
+class AnswerCoverage(BaseModel):
+    requirement_id: str = Field(min_length=1, max_length=20, description="必须使用问题清单中的编号，如Q1")
+    aspect: str = Field(min_length=1, max_length=200,
+                        description="该问题实际要求回答的一个要点；同一问题可有多个要点，不是思维过程")
+    status: Literal["answered", "insufficient", "withheld"] = Field(
+        description="已回答、缺证据、因整体拒答未输出；不能把指路或背景当成已回答")
+    claim_indices: list[Annotated[int, Field(strict=True, ge=1)]] = Field(
+        description="回答该要点的claims序号，从1开始；未回答时为空数组")
+    missing_information: str | None = Field(
+        description="未回答时明确缺口或整体拒答原因；已回答为null")
+
+
+class GenerationAnswerDraft(BaseModel):
+    """Required live-generation contract; old stored drafts/public APIs stay unchanged."""
+
+    coverage: list[AnswerCoverage] = Field(
+        min_length=1, max_length=32,
+        description="先识别各问题的必答要点，再生成对应结论；所有问题编号都须出现")
+    answerable: bool
+    claims: list[AnswerClaim] = Field(default_factory=list)
     refusal_reason: str | None = None
 
 

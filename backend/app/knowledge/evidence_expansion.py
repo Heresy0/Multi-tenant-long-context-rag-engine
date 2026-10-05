@@ -7,8 +7,43 @@ from langchain_core.documents import Document
 _INCIDENT = re.compile(r"(?<![A-Za-z0-9_-])INC-\d{4}-\d{3,8}(?![A-Za-z0-9_-])", re.I)
 
 
+def incident_identifiers(question):
+    return {value.upper() for value in _INCIDENT.findall(question)}
+
+
+def asks_incident_cause(question):
+    return bool(incident_identifiers(question) and re.search(r'根因|原因|为何|为什么', question))
+
+
+def incident_cause_quote(content, section):
+    """A bounded operative paragraph, not a title or referral to another source."""
+    if not re.search(r'根因|原因(?:分析)?', section):
+        return None
+    for line in content.splitlines():
+        line = line.strip()
+        if (not line or re.match(r'^(?:文档|章节|页码)[:：]', line) or '|' in line
+                or len(line) > 600 or re.search(r'应参照|应参考|请查阅|请参考|参见|详见', line)):
+            continue
+        if re.search(r'因此|导致|由于|因为|造成|引发|问题来自|根因(?:是|为|[:：])', line):
+            return line
+    return None
+
+
+def incident_source_matches(question, documents):
+    """Bind companions to an explicit incident in the same document/version."""
+    requested = incident_identifiers(question)
+    matches = {}
+    for doc in documents:
+        key = str(doc.metadata.get('document_id') or doc.metadata.get('source_id')
+                  or doc.metadata.get('source') or '')
+        found = requested.intersection(incident_identifiers(doc.page_content))
+        if key and found:
+            matches.setdefault(key, set()).update(found)
+    return matches
+
+
 def expand_incident_candidates(question, candidates, *, repository, scope, budget=30):
-    identifiers = {value.upper() for value in _INCIDENT.findall(question)}
+    identifiers = incident_identifiers(question)
     if not identifiers:
         return candidates
     anchors = []

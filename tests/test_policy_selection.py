@@ -23,6 +23,36 @@ def versions():
             document("历史差旅制度", "普通员工550元", {"effective_from": "2025-01-01", "effective_to": "2026-06-30", "business_version": "1.2", "business_status": "归档"})]
 
 
+def test_incident_hypothesis_is_not_reordered_as_generic_webhook_policy():
+    incident = document("事件复盘", "INC-2028-0123根因是客户调用未复用幂等键。")
+    policy = document("Webhook规范", "Webhook默认重试规则。", {'topics': ['webhook']})
+    question = "INC-2028-0123是Webhook的重试问题吗？实际根因是什么？"
+    assert [doc.id for doc in select_evidence(question, [incident, policy])] == [incident.id, policy.id]
+    assert select_evidence("Webhook默认重试规则？", [incident, policy])[0].id == policy.id
+
+
+def test_linked_cause_beats_referral_and_overview_before_final_top_k():
+    question = 'INC-2028-0123是Webhook的重试问题吗？实际根因是什么？'
+    overview = document('事件复盘', 'INC-2028-0123事件概要。', identifier='overview')
+    root = document('事件复盘', '客户端生成新的幂等键，因此创建重复任务。', identifier='root')
+    root.metadata['section_path'] = '3 根因与影响'
+    referral = document('Webhook规范', 'INC-2028-0123根因应参照复盘，不应套用Webhook规则。')
+    referral.metadata['section_path'] = '故障边界'
+    noise = [document(f'其他{i}', '通用规范正文。') for i in range(9)]
+    result = select_evidence(question, [referral, *noise, overview, root])[:8]
+    assert result[0].id == 'root'
+    assert result[0].metadata['matched_incident_ids'] == ['INC-2028-0123']
+    assert select_evidence('Webhook默认投递规则？', [overview, root, referral])[0].id == referral.id
+
+
+def test_cause_priority_never_links_another_document_or_trusts_stored_match_flags():
+    overview = document('事件甲', 'INC-2028-0123事件概要。')
+    other = document('事件乙', '客户端并发错误导致重复任务。')
+    other.metadata.update(section_path='根因', matched_incident_ids=['INC-2028-0123'])
+    result = select_evidence('INC-2028-0123实际根因是什么？', [overview, other])
+    assert result[0].id == overview.id and not result[1].metadata['matched_incident_ids']
+
+
 def test_labelled_dates_status_and_review_not_expiry():
     p = extract_policy("文档编号|POL-2026-01|版本|1.4\n生效日期|2026年7月1日|复审日期|2027年6月30日\n适用范围|全体员工", "差旅制度")
     assert p["effective_from"] == "2026-07-01" and p["business_version"] == "1.4"

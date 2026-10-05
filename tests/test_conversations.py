@@ -98,6 +98,93 @@ def test_paired_turns_persist_and_followup_uses_standalone_question(data):
         assert store.get(conversation.id).turn_count == 2
 
 
+def local_evaluation_fixture(data, monkeypatch):
+    from langchain_core.documents import Document
+    from backend.app.evaluation import conversation_runner as runner
+    from backend.app.evaluation.trace import record_scope, record_documents, record_context
+    from backend.app.knowledge.context_builder import ContextBuilder
+    from backend.app.knowledge.answer_models import Citation
+    monkeypatch.setenv('LOCAL_TEST_TOKEN', 'a.b.c')
+    monkeypatch.setattr(runner, 'Settings', lambda: SimpleNamespace(database_url='sqlite://'))
+    monkeypatch.setattr(runner, 'create_database_engine', lambda _: data.engine)
+    monkeypatch.setattr(data.engine, 'dispose', lambda: None)
+    verified = []
+    def verify(settings, session, token):
+        verified.append(token)
+        return data.principal
+    monkeypatch.setattr(runner, 'verified_principal', verify)
+    resolver, injected_error = Resolver(), []
+    class RecordingAnswer:
+        def answer(self, question, *, scope, session):
+            if injected_error:
+                raise RuntimeError('Never print Bearer secret-token or postgres://secret')
+            record_scope(question, scope)
+            doc_id = uuid4()
+            doc = Document(id='evidence', page_content='有效期为2小时。', metadata=dict(
+                document_id=str(doc_id), document_name='规范', tenant_id=str(scope.tenant_id),
+                knowledge_base_id=str(data.scope.knowledge_base_id)))
+            record_documents('authorized_final', [doc])
+            context = ContextBuilder().build([doc], question=question)
+            record_context(context)
+            return AnswerResult(answer='有效期为2小时。', answerable=True, citations=[Citation(
+                citation_id='资料1', document_id=doc_id, document_name='规范', section_path='未标注章节',
+                chunk_id='evidence', knowledge_base_id=data.scope.knowledge_base_id)])
+    monkeypatch.setattr(runner, 'RetrievalService', lambda _: object())
+    monkeypatch.setattr(runner, 'AnswerService', lambda **_: RecordingAnswer())
+    monkeypatch.setattr(runner, 'ConversationResolver', lambda _: resolver)
+    config = dict(knowledge_bases={'公共': str(data.scope.knowledge_base_id), '其他': str(data.other_kb.id)},
+                  profiles={'全范围测试用户': dict(token_env='LOCAL_TEST_TOKEN', expected_groups=['公共', '其他'])})
+    cases = [dict(id='MT-local', turns=[dict(id=f'T{i}', question=q, required_facts=['2小时'])
+                    for i, q in enumerate(('有效期？', '它过期了怎么办？'))])]
+    return runner, config, cases, verified, injected_error
+
+
+def test_local_multi_turn_traces_are_same_pipeline_and_cleanup_only_own_session(data, monkeypatch, tmp_path):
+    runner, config, cases, verified, _ = local_evaluation_fixture(data, monkeypatch)
+    existing = data.store.create().id
+    path = tmp_path / 'turns.jsonl'
+    report = runner.evaluate_local_conversations(cases, config, save_traces=path)
+    assert report['summary']['passed'] == 1 and report['turn_summary']['passed'] == 2
+    assert len(verified) == 3  # Setup + both turns; not just one identity check.
+    assert report['evaluation_type'] == 'authenticated_local_conversation_service_not_http'
+    traces = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines()]
+    assert len(traces) == 2 and traces[1]['stages']['conversation_resolution'][0]['history_count'] == 1
+    assert traces[1]['query'] == '开放平台访问令牌过期后如何处理？'
+    assert traces[1]['stages']['context'][0]['content'] == '有效期为2小时。'
+    assert traces[1]['response']['citations'][0]['chunk_id'] == 'evidence'
+    assert report['records'][0]['cleanup'] == 'deleted_owned_evaluation_conversation'
+    assert [row.id for row in data.session.scalars(select(Conversation))] == [existing]
+
+
+def test_local_multi_turn_error_is_redacted_later_turn_skipped_and_owned_session_cleaned(data, monkeypatch, tmp_path):
+    runner, config, cases, _, injected_error = local_evaluation_fixture(data, monkeypatch)
+    injected_error.append(True)
+    path = tmp_path / 'turns.jsonl'
+    report = runner.evaluate_local_conversations(cases, config, save_traces=path)
+    assert [row['status'] for row in report['records'][0]['turns']] == ['error', 'skipped']
+    assert report['records'][0]['cleanup'] == 'deleted_owned_evaluation_conversation'
+    assert not data.session.scalars(select(Conversation)).all()
+    text = path.read_text(encoding='utf-8') + json.dumps(report)
+    assert 'secret-token' not in text and 'postgres://' not in text
+
+
+def test_local_multi_turn_scope_mismatch_prevents_session_creation(data, monkeypatch):
+    runner, config, cases, _, _ = local_evaluation_fixture(data, monkeypatch)
+    config['profiles']['全范围测试用户']['expected_groups'] = ['公共']
+    report = runner.evaluate_local_conversations(cases, config)
+    assert report['summary']['error'] == 1 and not report['records'][0]['turns']
+    assert not data.session.scalars(select(Conversation)).all()
+
+
+def test_local_multi_turn_never_overwrites_existing_snapshot(data, monkeypatch, tmp_path):
+    runner, config, cases, _, _ = local_evaluation_fixture(data, monkeypatch)
+    path = tmp_path / 'turns.jsonl'
+    path.write_text('existing', encoding='utf-8')
+    with pytest.raises(FileExistsError):
+        runner.evaluate_local_conversations(cases, config, save_traces=path)
+    assert path.read_text(encoding='utf-8') == 'existing'
+
+
 @pytest.mark.parametrize("change", ["user", "tenant", "kb"])
 def test_private_conversation_isolation(data, change):
     conversation = data.store.create()

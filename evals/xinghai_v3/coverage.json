@@ -1,7 +1,7 @@
 {
   "company": "星海科技有限公司",
   "as_of": "2026-10-04",
-  "annotation_version": "2026-10-05-r4",
+  "annotation_version": "2026-10-06-r6",
   "semantic_annotations_execution": "manual_review_only_not_executed_by_current_scorer",
   "corpus_edition": "department-offline-v3-docx-manual-review",
   "single_turn_cases": 60,

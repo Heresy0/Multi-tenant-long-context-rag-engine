@@ -69,7 +69,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-05-r4"
+    "annotation_version": "2026-10-06-r6"
   },
   {
     "id": "XH-MT-02",
@@ -137,7 +137,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-05-r4"
+    "annotation_version": "2026-10-06-r6"
   },
   {
     "id": "XH-MT-03",
@@ -206,17 +206,18 @@
         "expected_answer": "不需要，已有任务保留并在恢复后继续执行。",
         "id": "XH-MT-03-T3",
         "required_facts": [
-          "不需要",
-          "保留"
+          "不需要"
         ],
         "required_source_documents": [
           "12_生产维护通知_扫描件.pdf"
         ],
         "check": "保留本组上下文，正确补全指代；用本轮授权证据回答，不编造事实。",
-        "optional_facts": [],
+        "optional_facts": [
+          "已有任务保留，并在恢复后继续执行"
+        ],
         "manual_review_required": true,
         "semantic_checks": [
-          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+          "核心是已有排队任务无需重新提交；保留和恢复后继续执行为补充，不因此扣分。若声称丢失或须重提仍是错误。"
         ],
         "accepted_source_document_sets": [
           [
@@ -228,7 +229,14 @@
           [
             "20_九月内部通知与值班安排.txt"
           ]
-        ]
+        ],
+        "fact_alternatives": {
+          "不需要": [
+            "无需重新提交",
+            "无须重新提交",
+            "不用重新提交"
+          ]
+        }
       }
     ],
     "sources": [
@@ -241,7 +249,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-05-r4"
+    "annotation_version": "2026-10-06-r6"
   },
   {
     "id": "XH-D-MT-04",
@@ -312,7 +320,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-05-r4"
+    "annotation_version": "2026-10-06-r6"
   },
   {
     "id": "XH-D-MT-05",
@@ -343,7 +351,7 @@
         ]
       },
       {
-        "question": "是Webhook的重试问题吗？",
+        "question": "是Webhook的重试问题吗？实际根因是什么？",
         "expected_answer": "不是该链路；已确认是客户报表调用重试未复用幂等键。",
         "id": "XH-D-MT-05-T2",
         "required_facts": [
@@ -357,7 +365,7 @@
         "optional_facts": [],
         "manual_review_required": true,
         "semantic_checks": [
-          "按本组前文补全对象和时间；核对本轮事实、条件与否定，不只查关键词。"
+          "否定Webhook链路，并依据事件复盘说明客户报表调用重试未复用幂等键；不能仅引用通用Webhook边界。"
         ]
       },
       {
@@ -384,7 +392,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-05-r4"
+    "annotation_version": "2026-10-06-r6"
   },
   {
     "id": "XH-MT-06",
@@ -453,7 +461,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-05-r4"
+    "annotation_version": "2026-10-06-r6"
   },
   {
     "id": "XH-MT-07",
@@ -529,7 +537,7 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-05-r4"
+    "annotation_version": "2026-10-06-r6"
   },
   {
     "id": "XH-MT-08",
@@ -588,7 +596,24 @@
         "manual_review_required": true,
         "semantic_checks": [
           "过滤历史不等于自动删除数据库记录，接受语义等价否定表达。"
-        ]
+        ],
+        "fact_alternatives": {
+          "不会自动删除": [
+            "不自动删除",
+            "不等于自动删除",
+            "不会把数据库记录一并删掉"
+          ]
+        },
+        "fact_assertions": {
+          "不会自动删除": {
+            "polarity": "negative",
+            "contradictions": [
+              "会自动删除数据库记录",
+              "会自动删除原记录",
+              "会把数据库记录一并删掉"
+            ]
+          }
+        }
       }
     ],
     "as_of": "2026-10-04",
@@ -596,6 +621,6 @@
     "retrieval_scope": "all_accessible",
     "reset_conversation_before_case": true,
     "evaluation_mode": "manual_or_separate_conversation_runner",
-    "annotation_version": "2026-10-05-r4"
+    "annotation_version": "2026-10-06-r6"
   }
 ]
